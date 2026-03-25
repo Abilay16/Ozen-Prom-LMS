@@ -1,0 +1,1 @@
+<template><div class="py-12 px-4 max-w-3xl mx-auto"><h1 class="text-3xl font-bold mb-4">Контакты</h1><p class="text-gray-600">Казахстан. Свяжитесь с нами для организации обучения.</p></div></template>

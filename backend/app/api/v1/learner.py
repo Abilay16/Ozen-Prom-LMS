@@ -1,0 +1,178 @@
+from uuid import UUID
+from datetime import datetime, timezone
+from typing import List
+from pydantic import BaseModel
+
+from fastapi import APIRouter
+from fastapi.responses import FileResponse
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.api.deps import CurrentLearner, DB
+from app.models.assignment import UserCourseAssignment, AssignmentStatus
+from app.models.attempt import TestAttempt, TestAttemptAnswer, AttemptStatus
+from app.models.material import CourseMaterial
+from app.core.exceptions import NotFoundError, ForbiddenError
+
+router = APIRouter()
+
+
+@router.get("/me")
+async def get_me(learner: CurrentLearner):
+    return {
+        "id": str(learner.id),
+        "login": learner.login,
+        "full_name": learner.full_name,
+    }
+
+
+@router.get("/me/courses")
+async def my_courses(db: DB, learner: CurrentLearner):
+    result = await db.execute(
+        select(UserCourseAssignment)
+        .options(
+            selectinload(UserCourseAssignment.course),
+            selectinload(UserCourseAssignment.discipline),
+        )
+        .where(UserCourseAssignment.user_id == learner.id)
+        .order_by(UserCourseAssignment.assigned_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.get("/me/courses/{assignment_id}")
+async def get_course_detail(assignment_id: UUID, db: DB, learner: CurrentLearner):
+    result = await db.execute(
+        select(UserCourseAssignment)
+        .options(
+            selectinload(UserCourseAssignment.course).selectinload("materials"),
+            selectinload(UserCourseAssignment.course).selectinload("test"),
+            selectinload(UserCourseAssignment.discipline),
+            selectinload(UserCourseAssignment.attempts),
+        )
+        .where(
+            UserCourseAssignment.id == assignment_id,
+            UserCourseAssignment.user_id == learner.id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise NotFoundError("Assignment not found")
+    return assignment
+
+
+@router.post("/me/courses/{assignment_id}/start-test")
+async def start_test(assignment_id: UUID, db: DB, learner: CurrentLearner):
+    result = await db.execute(
+        select(UserCourseAssignment)
+        .options(selectinload(UserCourseAssignment.course).selectinload("test"))
+        .where(
+            UserCourseAssignment.id == assignment_id,
+            UserCourseAssignment.user_id == learner.id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise NotFoundError("Assignment not found")
+    if assignment.status == AssignmentStatus.passed:
+        raise ForbiddenError("Course already passed")
+
+    test = assignment.course.test
+    if not test:
+        raise NotFoundError("No test for this course")
+
+    # Count attempts
+    att_result = await db.execute(
+        select(TestAttempt).where(
+            TestAttempt.assignment_id == assignment_id,
+            TestAttempt.user_id == learner.id,
+        )
+    )
+    attempts = att_result.scalars().all()
+    if test.max_attempts > 0 and len(attempts) >= test.max_attempts:
+        raise ForbiddenError("Maximum attempts reached")
+
+    attempt = TestAttempt(
+        user_id=learner.id,
+        assignment_id=assignment_id,
+        test_id=test.id,
+        attempt_number=len(attempts) + 1,
+    )
+    db.add(attempt)
+    assignment.status = AssignmentStatus.in_progress
+    await db.flush()
+
+    # Return questions WITHOUT correct answers
+    q_result = await db.execute(
+        select(test.__class__)  # reload with questions
+    )
+    return {
+        "attempt_id": str(attempt.id),
+        "test_id": str(test.id),
+        "time_limit_minutes": test.time_limit_minutes,
+        "total_questions": len(test.questions),
+        "questions": [
+            {
+                "id": str(q.id),
+                "text": q.text,
+                "options": [{"id": str(o.id), "text": o.text} for o in q.options],
+            }
+            for q in test.questions
+        ],
+    }
+
+
+class SubmitAnswers(BaseModel):
+    answers: List[dict]  # [{"question_id": "...", "option_id": "..."}]
+
+
+@router.post("/me/tests/{attempt_id}/submit")
+async def submit_test(attempt_id: UUID, body: SubmitAnswers, db: DB, learner: CurrentLearner):
+    from app.services.tests.engine import TestEngineService
+
+    result = await db.execute(
+        select(TestAttempt)
+        .options(selectinload(TestAttempt.assignment))
+        .where(TestAttempt.id == attempt_id, TestAttempt.user_id == learner.id)
+    )
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        raise NotFoundError("Attempt not found")
+    if attempt.status != AttemptStatus.in_progress:
+        raise ForbiddenError("Attempt already submitted")
+
+    engine = TestEngineService(db)
+    result_data = await engine.calculate_result(attempt, body.answers)
+    return result_data
+
+
+@router.get("/me/tests/{attempt_id}/result")
+async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
+    result = await db.execute(
+        select(TestAttempt)
+        .where(TestAttempt.id == attempt_id, TestAttempt.user_id == learner.id)
+    )
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        raise NotFoundError("Attempt not found")
+    return {
+        "attempt_id": str(attempt.id),
+        "score": attempt.score,
+        "max_score": attempt.max_score,
+        "score_percent": attempt.score_percent,
+        "passed": attempt.passed,
+        "finished_at": attempt.finished_at,
+    }
+
+
+@router.get("/materials/{material_id}/download")
+async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
+    """Secure download — only for authenticated learners."""
+    import os
+    result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
+    material = result.scalar_one_or_none()
+    if not material or not material.file_path:
+        raise NotFoundError("Material not found")
+    if not os.path.exists(material.file_path):
+        raise NotFoundError("File not found on disk")
+    return FileResponse(material.file_path, filename=os.path.basename(material.file_path))
