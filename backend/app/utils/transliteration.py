@@ -64,19 +64,22 @@ def transliterate(text: str) -> str:
 
 def transliterate_name_to_login(full_name: str) -> str:
     """
-    Convert full name to login base.
-    Input: "Алиев Абылай Илиясулы"
-    Output: "AliyevAI"
+    Convert full name to login base (lowercase, dot separator).
+    Input:  "Алиев Абылай Илиясулы"
+    Output: "aliev.a"
     """
     parts = full_name.strip().split()
     if not parts:
         return "user"
 
-    surname = transliterate(parts[0])
-    initials = "".join(transliterate(p[0]).upper() for p in parts[1:] if p)
-
-    # Clean non-alphanumeric
+    surname = transliterate(parts[0]).lower()
     surname = "".join(c for c in surname if c.isalpha())
-    initials = "".join(c for c in initials if c.isalpha())
 
-    return f"{surname}{initials}"
+    first_initial = ""
+    if len(parts) > 1:
+        first_initial = transliterate(parts[1][0]).lower()
+        first_initial = "".join(c for c in first_initial if c.isalpha())
+
+    if first_initial:
+        return f"{surname}.{first_initial}"
+    return surname

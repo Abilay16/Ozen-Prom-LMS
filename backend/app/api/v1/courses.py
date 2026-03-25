@@ -117,7 +117,7 @@ async def import_test_from_word(
     if test is None:
         test = Test(
             id=_uuid.uuid4(), course_id=course_id,
-            pass_score=70, max_attempts=3,
+            pass_score=60, max_attempts=3,
             time_limit_minutes=0, show_correct_answers=True,
         )
         db.add(test)

@@ -14,7 +14,7 @@ class Test(Base):
     course_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("courses.id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    pass_score: Mapped[int] = mapped_column(Integer, default=70)       # percentage
+    pass_score: Mapped[int] = mapped_column(Integer, default=60)       # percentage
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)      # 0 = unlimited
     time_limit_minutes: Mapped[int] = mapped_column(Integer, default=0)  # 0 = no limit
     show_correct_answers: Mapped[bool] = mapped_column(Boolean, default=False)

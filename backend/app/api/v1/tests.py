@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 class TestCreate(BaseModel):
-    pass_score: int = 70
+    pass_score: int = 60
     max_attempts: int = 3
     time_limit_minutes: int = 0
     show_correct_answers: bool = False
