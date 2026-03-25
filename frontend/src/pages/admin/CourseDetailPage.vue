@@ -85,7 +85,14 @@
 
           <div class="mb-3 flex items-center justify-between">
             <span class="text-sm font-medium">Вопросы ({{ test.questions?.length || 0 }})</span>
-            <button @click="questionModal = true" class="text-xs text-blue-600 hover:underline">+ Добавить вопрос</button>
+            <div class="flex gap-3">
+              <button @click="triggerWordImport" class="text-xs text-green-600 hover:underline">&#128196; Загрузить из Word</button>
+              <button @click="questionModal = true" class="text-xs text-blue-600 hover:underline">+ Добавить вопрос</button>
+            </div>
+          </div>
+          <input ref="wordInput" type="file" accept=".docx" class="hidden" @change="importFromWord" />
+          <div v-if="wordWarnings.length" class="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+            <div v-for="w in wordWarnings" :key="w">⚠ {{ w }}</div>
           </div>
 
           <!-- Add question modal -->
@@ -139,6 +146,8 @@ const test = ref(null)
 const materialModal = ref(false)
 const questionModal = ref(false)
 const matFile = ref(null)
+const wordInput = ref(null)
+const wordWarnings = ref([])
 const matForm = ref({ title: '', material_type: 'pdf', url: '' })
 const qForm = ref({ text: '', options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: true }] })
 
@@ -175,6 +184,30 @@ async function deleteMaterial(id) {
 async function createTest() {
   const { data } = await api.post(`/admin/tests/courses/${courseId}`, { pass_score: 70, max_attempts: 3 })
   test.value = data
+}
+
+function triggerWordImport() {
+  wordInput.value?.click()
+}
+
+async function importFromWord(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const { data } = await api.post(
+      `/admin/courses/${courseId}/test/import-word`,
+      fd,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
+    test.value = data.test
+    wordWarnings.value = data.warnings || []
+    alert(`Импортировано вопросов: ${data.imported}`)
+  } catch (err) {
+    alert('Ошибка импорта: ' + (err.response?.data?.detail || err.message))
+  }
+  e.target.value = ''
 }
 
 async function addQuestion() {
