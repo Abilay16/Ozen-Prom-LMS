@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -63,20 +62,6 @@ const router = createRouter({
     // ─── 404 ──────────────────────────────────────────────
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/pages/NotFoundPage.vue') },
   ],
-})
-
-// Navigation guard
-router.beforeEach((to, from, next) => {
-  const auth = useAuthStore()
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return next('/login')
-  }
-  if (to.meta.role && auth.role !== to.meta.role) {
-    if (auth.role === 'admin') return next('/admin')
-    if (auth.role === 'learner') return next('/my')
-    return next('/login')
-  }
-  next()
 })
 
 export default router

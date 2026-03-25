@@ -64,7 +64,8 @@ onMounted(async () => {
 })
 
 async function createBatch() {
-  await api.post('/admin/batches', form.value)
+  const payload = { ...form.value, organization_id: form.value.organization_id || null }
+  await api.post('/admin/batches', payload)
   showCreate.value = false
   const { data } = await api.get('/admin/batches')
   batches.value = data

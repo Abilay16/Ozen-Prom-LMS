@@ -44,12 +44,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { RouterView, RouterLink, useLink, useRouter } from 'vue-router'
+import { ref, h } from 'vue'
+import { RouterView, RouterLink, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const sidebarOpen = ref(false)
 
 function handleLogout() {
@@ -57,18 +58,19 @@ function handleLogout() {
   router.push('/login')
 }
 
-// NavLink helper component (inline)
-const NavLink = {
-  props: ['to', 'icon'],
-  template: `
-    <RouterLink :to="to"
-      class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-      :class="$route.path.startsWith(to) ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white'"
-    >
-      <span>{{ icon }}</span>
-      <slot />
-    </RouterLink>
-  `,
-  components: { RouterLink },
+// NavLink — render function (no template string, works without runtime compiler)
+const NavLink = (props, { slots }) => {
+  const isActive = route.path.startsWith(props.to)
+  return h(
+    RouterLink,
+    {
+      to: props.to,
+      class: [
+        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+        isActive ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white',
+      ],
+    },
+    () => [h('span', props.icon), slots.default?.()]
+  )
 }
 </script>
