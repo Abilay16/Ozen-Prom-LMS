@@ -17,21 +17,30 @@ class UserFactoryService:
         if not base:
             base = "user"
 
-        for _ in range(20):
-            digits = "".join(random.choices(string.digits, k=random.randint(2, 3)))
-            candidate = f"{base}{digits}"
+        # Try clean base first
+        result = await self.db.execute(select(User).where(User.login == base))
+        if not result.scalar_one_or_none():
+            return base
+
+        # Add numeric suffix until unique
+        for i in range(2, 100):
+            candidate = f"{base}{i}"
             result = await self.db.execute(select(User).where(User.login == candidate))
             if not result.scalar_one_or_none():
                 return candidate
 
-        # Fallback: longer suffix
-        suffix = "".join(random.choices(string.digits, k=6))
+        import random as _r
+        suffix = "".join(_r.choices(string.digits, k=4))
         return f"{base}{suffix}"
 
     @staticmethod
     def generate_password() -> str:
-        length = random.randint(6, 7)
-        return "".join(random.choices(string.digits, k=length))
+        # 3 letters + 3 digits — easy to remember
+        letters = random.choices(string.ascii_lowercase, k=3)
+        digits = random.choices(string.digits, k=3)
+        combined = letters + digits
+        random.shuffle(combined)
+        return "".join(combined)
 
     @staticmethod
     def normalize_full_name(full_name: str) -> str:

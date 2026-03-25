@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import String, DateTime, ForeignKey, Text, Enum as SAEnum
+from sqlalchemy import String, DateTime, ForeignKey, Text, Enum as SAEnum, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -28,6 +28,8 @@ class TrainingBatch(Base):
     )
     excel_file_path: Mapped[str | None] = mapped_column(String(512))
     notes: Mapped[str | None] = mapped_column(Text)
+    # List of discipline UUID strings selected for this batch
+    discipline_ids: Mapped[list | None] = mapped_column(JSON, default=list)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("admin_users.id", ondelete="SET NULL")
     )

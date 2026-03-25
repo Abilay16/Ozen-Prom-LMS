@@ -66,10 +66,7 @@ class ImportParserService:
                 parsed["warnings"].append("Должность не указана")
                 if parsed["status"] == "ok":
                     parsed["status"] = "manual_review"
-            if not parsed["disciplines_raw"]:
-                parsed["warnings"].append("Дисциплина не указана")
-                if parsed["status"] == "ok":
-                    parsed["status"] = "manual_review"
+            # NOTE: disciplines_raw is now optional — disciplines come from the batch
 
             rows.append(parsed)
 

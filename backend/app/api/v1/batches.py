@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, DB
 from app.models.batch import TrainingBatch, BatchStatus
+from app.models.discipline import Discipline
 from app.core.exceptions import NotFoundError
 
 router = APIRouter()
@@ -13,22 +14,46 @@ router = APIRouter()
 
 class BatchCreate(BaseModel):
     name: str
-    organization_id: Optional[UUID] = None
+    discipline_ids: list[UUID] = []
     notes: Optional[str] = None
 
 
 @router.get("")
-async def list_batches(db: DB, admin: CurrentAdmin, organization_id: Optional[UUID] = None):
-    q = select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
-    if organization_id:
-        q = q.where(TrainingBatch.organization_id == organization_id)
-    result = await db.execute(q)
-    return result.scalars().all()
+async def list_batches(db: DB, admin: CurrentAdmin):
+    result = await db.execute(
+        select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
+    )
+    batches = result.scalars().all()
+    # Enrich with discipline names
+    out = []
+    for b in batches:
+        disc_names = []
+        if b.discipline_ids:
+            for did in b.discipline_ids:
+                r = await db.execute(select(Discipline).where(Discipline.id == did))
+                d = r.scalar_one_or_none()
+                if d:
+                    disc_names.append(d.name)
+        out.append({
+            "id": b.id,
+            "name": b.name,
+            "status": b.status,
+            "discipline_ids": b.discipline_ids,
+            "discipline_names": disc_names,
+            "created_at": b.created_at,
+            "notes": b.notes,
+        })
+    return out
 
 
 @router.post("", status_code=201)
 async def create_batch(body: BatchCreate, db: DB, admin: CurrentAdmin):
-    batch = TrainingBatch(**body.model_dump(), created_by_id=admin.id)
+    batch = TrainingBatch(
+        name=body.name,
+        notes=body.notes,
+        discipline_ids=[str(did) for did in body.discipline_ids],
+        created_by_id=admin.id,
+    )
     db.add(batch)
     await db.flush()
     return batch
@@ -36,16 +61,47 @@ async def create_batch(body: BatchCreate, db: DB, admin: CurrentAdmin):
 
 @router.get("/{batch_id}")
 async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):
-    result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
+    from app.models.import_row import ImportRow
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(TrainingBatch).where(TrainingBatch.id == batch_id)
+    )
     batch = result.scalar_one_or_none()
     if not batch:
         raise NotFoundError("Batch not found")
-    return batch
+    # Count import rows
+    rows_result = await db.execute(
+        select(ImportRow).where(ImportRow.batch_id == batch_id)
+    )
+    rows = rows_result.scalars().all()
+    disc_names = []
+    if batch.discipline_ids:
+        for did in batch.discipline_ids:
+            r = await db.execute(select(Discipline).where(Discipline.id == did))
+            d = r.scalar_one_or_none()
+            if d:
+                disc_names.append({"id": str(d.id), "name": d.name})
+    return {
+        "id": batch.id,
+        "name": batch.name,
+        "status": batch.status,
+        "discipline_ids": batch.discipline_ids,
+        "disciplines": disc_names,
+        "notes": batch.notes,
+        "created_at": batch.created_at,
+        "excel_file_path": batch.excel_file_path,
+        "row_summary": {
+            "total": len(rows),
+            "ok": sum(1 for r in rows if str(r.status) in ("ok", "ImportRowStatus.ok")),
+            "duplicate": sum(1 for r in rows if "duplicate" in str(r.status)),
+            "error": sum(1 for r in rows if "error" in str(r.status)),
+            "manual_review": sum(1 for r in rows if "manual_review" in str(r.status)),
+        },
+    }
 
 
 @router.post("/{batch_id}/upload-excel")
 async def upload_excel(batch_id: UUID, file: UploadFile = File(...), db: DB = None, admin: CurrentAdmin = None):
-    """Upload Excel file for a batch. Returns raw file path."""
     import os, aiofiles
     from app.core.config import settings
 
@@ -64,12 +120,11 @@ async def upload_excel(batch_id: UUID, file: UploadFile = File(...), db: DB = No
 
     batch.excel_file_path = file_path
     batch.status = BatchStatus.processing
-    return {"file_path": file_path, "message": "File uploaded. Call preview-import next."}
+    return {"ok": True}
 
 
 @router.post("/{batch_id}/preview-import")
 async def preview_import(batch_id: UUID, db: DB, admin: CurrentAdmin):
-    """Parse uploaded Excel and return preview rows without committing."""
     from app.services.imports.parser import ImportParserService
 
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
