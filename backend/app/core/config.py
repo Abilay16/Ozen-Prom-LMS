@@ -14,8 +14,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:80"]
+    # CORS — comma-separated string in .env
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:80"
+
+    def allowed_origins_list(self) -> List[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     # Storage
     STORAGE_BACKEND: str = "local"
