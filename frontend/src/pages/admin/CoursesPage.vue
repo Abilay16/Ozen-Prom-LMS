@@ -71,6 +71,7 @@
             <td class="px-4 py-3 flex gap-3">
               <RouterLink :to="`/admin/courses/${c.id}`" class="text-blue-600 hover:underline text-xs">Открыть</RouterLink>
               <button @click="openEdit(c)" class="text-gray-500 hover:underline text-xs">Изменить</button>
+              <button @click="deleteCourse(c)" class="text-red-400 hover:text-red-600 hover:underline text-xs">Удалить</button>
             </td>
           </tr>
         </tbody>
@@ -121,6 +122,12 @@ async function save() {
     await api.post('/admin/courses', form.value)
   }
   modal.value = false
+  await load()
+}
+
+async function deleteCourse(c) {
+  if (!confirm(`Удалить курс "${c.name}"? Это также удалит все назначения этого курса.`)) return
+  await api.delete(`/admin/courses/${c.id}`)
   await load()
 }
 </script>

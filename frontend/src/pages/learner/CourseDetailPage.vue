@@ -41,18 +41,50 @@
             <a :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть ↗</a>
           </div>
           <!-- Downloadable file -->
-          <div v-else class="flex items-center gap-3">
-            <span class="text-xl">{{ materialIcon(mat.material_type) }}</span>
-            <div class="flex-1">
-              <div class="font-medium text-sm">{{ mat.title }}</div>
-              <div class="text-xs text-gray-400">{{ mat.material_type }}</div>
+          <div v-else class="border border-gray-100 rounded-lg overflow-hidden">
+            <div class="flex items-center gap-3 p-3">
+              <span class="text-2xl">{{ materialIcon(mat.material_type) }}</span>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-sm truncate">{{ mat.title }}</div>
+                <div class="text-xs text-gray-400 capitalize">{{ matTypeLabel(mat.material_type) }}</div>
+              </div>
+              <div v-if="mat.file_path" class="flex items-center gap-2 flex-shrink-0">
+                <button
+                  v-if="canPreview(mat.material_type)"
+                  @click="toggleViewer(mat)"
+                  class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+                  :class="viewerMatId === mat.id
+                    ? 'bg-gray-200 text-gray-700'
+                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100'"
+                  :disabled="viewerLoading[mat.id]"
+                >
+                  {{ viewerLoading[mat.id] ? 'Загрузка...' : viewerMatId === mat.id ? '✕ Закрыть' : '👁 Открыть' }}
+                </button>
+                <button @click="downloadMaterial(mat)" class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 hover:underline">
+                  ↓ Скачать
+                </button>
+              </div>
             </div>
-            <a
-              v-if="mat.file_path"
-              href="#"
-              @click.prevent="downloadMaterial(mat)"
-              class="text-sm text-brand-mid hover:underline"
-            >Скачать</a>
+            <!-- Inline viewer -->
+            <div v-if="viewerMatId === mat.id && viewerSrcs[mat.id]" class="border-t border-gray-100">
+              <iframe
+                v-if="mat.material_type === 'pdf'"
+                :src="viewerSrcs[mat.id]"
+                class="w-full"
+                style="height: 75vh;"
+                frameborder="0"
+              ></iframe>
+              <div v-else-if="mat.material_type === 'image'" class="p-4 bg-gray-50">
+                <img :src="viewerSrcs[mat.id]" class="max-w-full mx-auto block rounded shadow" alt="" />
+              </div>
+              <video
+                v-else-if="mat.material_type === 'video_file'"
+                :src="viewerSrcs[mat.id]"
+                controls
+                class="w-full bg-black"
+                style="max-height: 70vh;"
+              ></video>
+            </div>
           </div>
         </div>
       </div>
@@ -93,6 +125,9 @@ const router = useRouter()
 const assignment = ref(null)
 const loading = ref(true)
 const starting = ref(false)
+const viewerMatId = ref(null)
+const viewerSrcs = ref({})
+const viewerLoading = ref({})
 
 const completedAttempts = computed(() =>
   assignment.value?.attempts?.filter(a => a.status === 'completed').length ?? 0
@@ -123,6 +158,34 @@ async function startTest() {
 function materialIcon(type) {
   const icons = { video_file: '🎬', video_url: '▶️', pdf: '📄', docx: '📝', image: '🖼️', external_link: '🔗' }
   return icons[type] || '📎'
+}
+
+function matTypeLabel(type) {
+  return { pdf: 'PDF документ', image: 'Изображение', video_file: 'Видеофайл', docx: 'Word документ' }[type] || type
+}
+
+function canPreview(type) {
+  return ['pdf', 'image', 'video_file'].includes(type)
+}
+
+async function toggleViewer(mat) {
+  if (viewerMatId.value === mat.id) {
+    viewerMatId.value = null
+    return
+  }
+  if (!viewerSrcs.value[mat.id]) {
+    viewerLoading.value = { ...viewerLoading.value, [mat.id]: true }
+    try {
+      const { data } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: URL.createObjectURL(data) }
+    } catch {
+      alert('Не удалось загрузить файл')
+      return
+    } finally {
+      viewerLoading.value = { ...viewerLoading.value, [mat.id]: false }
+    }
+  }
+  viewerMatId.value = mat.id
 }
 
 function youtubeId(url) {

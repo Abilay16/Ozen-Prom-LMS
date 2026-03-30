@@ -42,8 +42,9 @@
             <td class="px-4 py-3">
               <span :class="d.is_active ? 'badge-passed' : 'badge-failed'">{{ d.is_active ? 'Активна' : 'Неактивна' }}</span>
             </td>
-            <td class="px-4 py-3">
+            <td class="px-4 py-3 flex gap-3">
               <button @click="openEdit(d)" class="text-xs text-blue-600 hover:underline">Изменить</button>
+              <button @click="deleteDisc(d)" class="text-xs text-red-400 hover:text-red-600 hover:underline">Удалить</button>
             </td>
           </tr>
         </tbody>
@@ -86,6 +87,12 @@ async function save() {
     await api.post('/admin/disciplines', form.value)
   }
   modal.value = false
+  await load()
+}
+
+async function deleteDisc(d) {
+  if (!confirm(`Удалить дисциплину "${d.name}"?`)) return
+  await api.delete(`/admin/disciplines/${d.id}`)
   await load()
 }
 </script>
