@@ -35,6 +35,7 @@
             </td>
             <td class="py-3 px-2">
               <button @click="openEdit(u)" class="text-xs text-blue-600 hover:underline">Изменить</button>
+              <button @click="deleteUser(u)" class="text-xs text-red-400 hover:text-red-600 hover:underline ml-2">Удалить</button>
             </td>
           </tr>
         </tbody>
@@ -129,4 +130,10 @@ async function save() {
 
 onMounted(load)
 watch(search, () => setTimeout(load, 300))
+
+async function deleteUser(u) {
+  if (!confirm(`Деактивировать пользователя "${u.full_name}"? Он будет скрыт из списков.`)) return
+  await api.delete(`/admin/users/${u.id}`)
+  await load()
+}
 </script>

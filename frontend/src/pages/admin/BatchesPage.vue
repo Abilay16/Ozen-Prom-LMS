@@ -48,22 +48,22 @@
 
     <!-- Batches list -->
     <div class="space-y-3">
-      <RouterLink v-for="b in batches" :key="b.id" :to="`/admin/batches/${b.id}`"
-        class="card block hover:shadow-md transition-shadow">
-        <div class="flex items-center justify-between">
-          <div class="flex-1 min-w-0">
-            <div class="font-semibold">{{ b.name }}</div>
-            <div class="text-sm text-gray-400 mt-1">{{ formatDate(b.created_at) }}</div>
-            <div v-if="b.discipline_names?.length" class="flex flex-wrap gap-1 mt-2">
-              <span v-for="n in b.discipline_names" :key="n"
-                class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">{{ n }}</span>
-            </div>
+      <div v-for="b in batches" :key="b.id" class="card flex items-center gap-3">
+        <RouterLink :to="`/admin/batches/${b.id}`" class="flex-1 min-w-0 hover:opacity-80">
+          <div class="font-semibold">{{ b.name }}</div>
+          <div class="text-sm text-gray-400 mt-1">{{ formatDate(b.created_at) }}</div>
+          <div v-if="b.discipline_names?.length" class="flex flex-wrap gap-1 mt-2">
+            <span v-for="n in b.discipline_names" :key="n"
+              class="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">{{ n }}</span>
           </div>
-          <span :class="statusBadge(b.status)" class="ml-4 px-3 py-1 rounded-full text-sm whitespace-nowrap">
+        </RouterLink>
+        <div class="flex flex-col items-end gap-2">
+          <span :class="statusBadge(b.status)" class="px-3 py-1 rounded-full text-sm whitespace-nowrap">
             {{ statusLabel(b.status) }}
           </span>
+          <button @click="deleteBatch(b)" class="text-xs text-red-400 hover:text-red-600">Удалить</button>
         </div>
-      </RouterLink>
+      </div>
     </div>
   </div>
 </template>
@@ -117,5 +117,13 @@ function statusBadge(s) {
 
 function statusLabel(s) {
   return { draft: 'Черновик', processing: 'Обработка', completed: 'Завершён', archived: 'Архив' }[s] || s
+}
+
+async function deleteBatch(b) {
+  const withUsers = confirm(
+    `Удалить поток "${b.name}"?\n\nНажмите «ОК» чтобы также деактивировать всех сотрудников этого потока.\nНажмите «Отмена» чтобы удалить только поток, сохранив сотрудников.`
+  )
+  await api.delete(`/admin/batches/${b.id}`, { params: { deactivate_users: withUsers } })
+  batches.value = batches.value.filter(x => x.id !== b.id)
 }
 </script>

@@ -113,6 +113,21 @@ async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):
     }
 
 
+@router.delete("/{batch_id}", status_code=204)
+async def delete_batch(batch_id: UUID, db: DB, admin: CurrentAdmin, deactivate_users: bool = False):
+    """Delete a batch. If deactivate_users=true, also deactivate all users in this batch."""
+    from app.models.user import User
+    result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
+    batch = result.scalar_one_or_none()
+    if not batch:
+        raise NotFoundError("Batch not found")
+    if deactivate_users:
+        users_result = await db.execute(select(User).where(User.batch_id == batch_id))
+        for u in users_result.scalars().all():
+            u.is_active = False
+    await db.delete(batch)
+
+
 @router.post("/{batch_id}/upload-excel")
 async def upload_excel(batch_id: UUID, file: UploadFile = File(...), db: DB = None, admin: CurrentAdmin = None):
     import os, aiofiles

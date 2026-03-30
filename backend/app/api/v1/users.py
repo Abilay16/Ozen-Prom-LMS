@@ -85,6 +85,15 @@ async def update_user(user_id: UUID, data: UpdateUserRequest, db: DB, admin: Cur
     return user
 
 
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(user_id: UUID, db: DB, admin: CurrentAdmin):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+    user.is_active = False
+
+
 @router.post("/{user_id}/reset-password")
 async def reset_password(user_id: UUID, body: ResetPasswordRequest, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
