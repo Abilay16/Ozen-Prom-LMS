@@ -26,14 +26,16 @@
               <div>
                 <label class="text-sm font-medium text-gray-700">Тип</label>
                 <select v-model="matForm.material_type" class="input-field mt-1">
-                  <option value="pdf">PDF</option>
-                  <option value="video">Видео (URL)</option>
-                  <option value="presentation">Презентация</option>
-                  <option value="other">Прочее</option>
+                  <option value="pdf">PDF документ</option>
+                  <option value="video_url">Видео (URL / YouTube)</option>
+                  <option value="video_file">Видео (файл)</option>
+                  <option value="docx">Презентация / Word</option>
+                  <option value="image">Изображение</option>
+                  <option value="external_link">Внешняя ссылка</option>
                 </select>
               </div>
-              <div v-if="matForm.material_type === 'video'">
-                <label class="text-sm font-medium text-gray-700">URL видео</label>
+              <div v-if="matForm.material_type === 'video_url' || matForm.material_type === 'external_link'">
+                <label class="text-sm font-medium text-gray-700">{{ matForm.material_type === 'video_url' ? 'URL видео (YouTube, Vimeo...)' : 'URL ссылки' }}</label>
                 <input v-model="matForm.url" class="input-field mt-1" placeholder="https://..." />
               </div>
               <div v-else>
@@ -50,9 +52,12 @@
 
         <ul class="space-y-2">
           <li v-for="m in materials" :key="m.id" class="flex items-center justify-between p-2 rounded bg-gray-50">
-            <div>
-              <span class="font-medium text-sm">{{ m.title }}</span>
-              <span class="ml-2 text-xs text-gray-400">{{ m.material_type }}</span>
+            <div class="flex items-center gap-2">
+              <span>{{ matIcon(m.material_type) }}</span>
+              <div>
+                <span class="font-medium text-sm">{{ m.title }}</span>
+                <span class="ml-2 text-xs text-gray-400">{{ m.material_type }}</span>
+              </div>
             </div>
             <button @click="deleteMaterial(m.id)" class="text-red-400 text-xs hover:underline">Удалить</button>
           </li>
@@ -149,6 +154,11 @@ const matFile = ref(null)
 const wordInput = ref(null)
 const wordWarnings = ref([])
 const matForm = ref({ title: '', material_type: 'pdf', url: '' })
+
+const MAT_ICONS = {
+  pdf: '📄', video_url: '▶️', video_file: '🎬', docx: '📊', image: '🖼️', external_link: '🔗',
+}
+function matIcon(t) { return MAT_ICONS[t] || '📎' }
 const qForm = ref({ text: '', options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: true }] })
 
 onMounted(async () => {
@@ -163,15 +173,26 @@ onMounted(async () => {
 })
 
 async function uploadMaterial() {
+  if (!matForm.value.title.trim()) { alert('Введите заголовок'); return }
+  const needsFile = !['video_url', 'external_link'].includes(matForm.value.material_type)
+  if (needsFile && !matFile.value) { alert('Выберите файл'); return }
+  if (!needsFile && !matForm.value.url.trim()) { alert('Введите URL'); return }
   const fd = new FormData()
   fd.append('title', matForm.value.title)
   fd.append('material_type', matForm.value.material_type)
   if (matForm.value.url) fd.append('url', matForm.value.url)
   if (matFile.value) fd.append('file', matFile.value)
-  await api.post(`/admin/materials/courses/${courseId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-  materialModal.value = false
-  const { data } = await api.get(`/admin/courses/${courseId}/materials`)
-  materials.value = data
+  try {
+    await api.post(`/admin/materials/courses/${courseId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    materialModal.value = false
+    matForm.value = { title: '', material_type: 'pdf', url: '' }
+    matFile.value = null
+    if (matFileInput.value) matFileInput.value.value = ''
+    const { data } = await api.get(`/admin/courses/${courseId}/materials`)
+    materials.value = data
+  } catch (e) {
+    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+  }
 }
 
 async function deleteMaterial(id) {
@@ -182,7 +203,7 @@ async function deleteMaterial(id) {
 }
 
 async function createTest() {
-  const { data } = await api.post(`/admin/tests/courses/${courseId}`, { pass_score: 70, max_attempts: 3 })
+  const { data } = await api.post(`/admin/tests/courses/${courseId}`, { pass_score: 60, max_attempts: 3 })
   test.value = data
 }
 

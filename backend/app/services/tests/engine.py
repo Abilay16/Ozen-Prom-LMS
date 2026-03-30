@@ -22,10 +22,10 @@ class TestEngineService:
         answers = [{"question_id": "...", "option_id": "..."}]
         """
         # Load test with questions
-        from app.models.test import Test
+        from app.models.test import Test, TestQuestion
         test_result = await self.db.execute(
             select(Test)
-            .options(selectinload(Test.questions).selectinload("options"))
+            .options(selectinload(Test.questions).selectinload(TestQuestion.options))
             .where(Test.id == attempt.test_id)
         )
         test = test_result.scalar_one()
@@ -41,14 +41,31 @@ class TestEngineService:
         total = len(test.questions)
 
         for ans in answers:
-            q_id = str(ans.get("question_id", ""))
-            opt_id = str(ans.get("option_id", ""))
-            is_correct = correct_map.get(q_id) == opt_id
+            q_id_raw = ans.get("question_id")
+            opt_id_raw = ans.get("option_id")
+
+            # Convert to UUID objects (model columns are Mapped[uuid.UUID])
+            try:
+                q_uuid = UUID(str(q_id_raw)) if q_id_raw else None
+            except (ValueError, AttributeError):
+                q_uuid = None
+
+            try:
+                opt_uuid = UUID(str(opt_id_raw)) if opt_id_raw else None
+            except (ValueError, AttributeError):
+                opt_uuid = None
+
+            if q_uuid is None:
+                continue  # skip malformed answers
+
+            q_id_str = str(q_uuid)
+            opt_id_str = str(opt_uuid) if opt_uuid else None
+            is_correct = opt_id_str is not None and correct_map.get(q_id_str) == opt_id_str
 
             answer_record = TestAttemptAnswer(
                 attempt_id=attempt.id,
-                question_id=q_id,
-                selected_option_id=opt_id if opt_id else None,
+                question_id=q_uuid,
+                selected_option_id=opt_uuid,
                 is_correct=is_correct,
             )
             self.db.add(answer_record)

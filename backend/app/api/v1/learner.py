@@ -11,7 +11,9 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import CurrentLearner, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.attempt import TestAttempt, TestAttemptAnswer, AttemptStatus
+from app.models.course import Course
 from app.models.material import CourseMaterial
+from app.models.test import Test, TestQuestion
 from app.core.exceptions import NotFoundError, ForbiddenError
 
 router = APIRouter()
@@ -33,6 +35,7 @@ async def my_courses(db: DB, learner: CurrentLearner):
         .options(
             selectinload(UserCourseAssignment.course),
             selectinload(UserCourseAssignment.discipline),
+            selectinload(UserCourseAssignment.attempts),
         )
         .where(UserCourseAssignment.user_id == learner.id)
         .order_by(UserCourseAssignment.assigned_at.desc())
@@ -45,8 +48,8 @@ async def get_course_detail(assignment_id: UUID, db: DB, learner: CurrentLearner
     result = await db.execute(
         select(UserCourseAssignment)
         .options(
-            selectinload(UserCourseAssignment.course).selectinload("materials"),
-            selectinload(UserCourseAssignment.course).selectinload("test"),
+            selectinload(UserCourseAssignment.course).selectinload(Course.materials),
+            selectinload(UserCourseAssignment.course).selectinload(Course.test),
             selectinload(UserCourseAssignment.discipline),
             selectinload(UserCourseAssignment.attempts),
         )
@@ -65,7 +68,7 @@ async def get_course_detail(assignment_id: UUID, db: DB, learner: CurrentLearner
 async def start_test(assignment_id: UUID, db: DB, learner: CurrentLearner):
     result = await db.execute(
         select(UserCourseAssignment)
-        .options(selectinload(UserCourseAssignment.course).selectinload("test"))
+        .options(selectinload(UserCourseAssignment.course).selectinload(Course.test))
         .where(
             UserCourseAssignment.id == assignment_id,
             UserCourseAssignment.user_id == learner.id,
@@ -103,21 +106,24 @@ async def start_test(assignment_id: UUID, db: DB, learner: CurrentLearner):
     await db.flush()
 
     # Return questions WITHOUT correct answers
-    q_result = await db.execute(
-        select(test.__class__)  # reload with questions
+    t_result = await db.execute(
+        select(Test)
+        .options(selectinload(Test.questions).selectinload(TestQuestion.options))
+        .where(Test.id == test.id)
     )
+    loaded_test = t_result.scalar_one()
     return {
         "attempt_id": str(attempt.id),
-        "test_id": str(test.id),
-        "time_limit_minutes": test.time_limit_minutes,
-        "total_questions": len(test.questions),
+        "test_id": str(loaded_test.id),
+        "time_limit_minutes": loaded_test.time_limit_minutes,
+        "total_questions": len(loaded_test.questions),
         "questions": [
             {
                 "id": str(q.id),
                 "text": q.text,
                 "options": [{"id": str(o.id), "text": o.text} for o in q.options],
             }
-            for q in test.questions
+            for q in loaded_test.questions
         ],
     }
 

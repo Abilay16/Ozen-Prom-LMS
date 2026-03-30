@@ -17,6 +17,29 @@
       </div>
     </div>
 
+    <!-- Batch stats panel (shown after import completes) -->
+    <div v-if="batch?.status === 'completed' && batchStats" class="card mb-4">
+      <h2 class="font-semibold mb-3">Статистика потока</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="text-center p-3 bg-gray-50 rounded">
+          <div class="text-2xl font-bold text-gray-700">{{ batchStats.total }}</div>
+          <div class="text-xs text-gray-500">Сотрудников</div>
+        </div>
+        <div class="text-center p-3 bg-green-50 rounded">
+          <div class="text-2xl font-bold text-green-600">{{ batchStats.passed }}</div>
+          <div class="text-xs text-gray-500">Сдали</div>
+        </div>
+        <div class="text-center p-3 bg-blue-50 rounded">
+          <div class="text-2xl font-bold text-blue-600">{{ batchStats.in_progress }}</div>
+          <div class="text-xs text-gray-500">В процессе</div>
+        </div>
+        <div class="text-center p-3 bg-yellow-50 rounded">
+          <div class="text-2xl font-bold text-yellow-600">{{ batchStats.assigned }}</div>
+          <div class="text-xs text-gray-500">Не начали</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Excel format hint -->
     <div class="card mb-4 bg-blue-50 border border-blue-200">
       <div class="text-sm font-semibold text-blue-800 mb-1"> Формат Excel-файла</div>
@@ -158,6 +181,7 @@ const route = useRoute()
 const batchId = route.params.id
 
 const batch = ref(null)
+const batchStats = ref(null)
 const selectedFile = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -170,6 +194,17 @@ const result = ref(null)
 onMounted(async () => {
   const { data } = await api.get(`/admin/batches/${batchId}`)
   batch.value = data
+  if (data.status === 'completed') {
+    try {
+      const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
+      batchStats.value = {
+        total: progress.length,
+        passed: progress.filter(r => r.status === 'passed').length,
+        in_progress: progress.filter(r => r.status === 'in_progress').length,
+        assigned: progress.filter(r => r.status === 'assigned').length,
+      }
+    } catch {}
+  }
 })
 
 function onFileSelect(e) {
@@ -204,10 +239,24 @@ async function confirmImport() {
   confirming.value = true
   try {
     const { data } = await api.post(`/admin/batches/${batchId}/confirm-import`)
-    result.value = data
-    const { data: b } = await api.get(`/admin/batches/${batchId}`)
-    batch.value = b
-    preview.value = null
+    if (data.error) {
+      alert('Ошибка импорта: ' + data.error)
+    } else {
+      result.value = data
+      const { data: b } = await api.get(`/admin/batches/${batchId}`)
+      batch.value = b
+      preview.value = null
+      // Load stats
+      try {
+        const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
+        batchStats.value = {
+          total: progress.length,
+          passed: progress.filter(r => r.status === 'passed').length,
+          in_progress: progress.filter(r => r.status === 'in_progress').length,
+          assigned: progress.filter(r => r.status === 'assigned').length,
+        }
+      } catch {}
+    }
   } catch (err) {
     alert('Ошибка: ' + (err.response?.data?.detail || err.message))
   }
@@ -215,14 +264,21 @@ async function confirmImport() {
 }
 
 async function downloadCredentials() {
-  const token = localStorage.getItem('token')
-  const url = `${import.meta.env.VITE_API_URL || ''}/api/v1/admin/exports/logins-passwords?batch_id=${batchId}`
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `credentials_${batchId}.xlsx`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  try {
+    const { data } = await api.get(`/admin/exports/logins-passwords?batch_id=${batchId}`, {
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `credentials_${batchId}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    alert('Ошибка скачивания: ' + err.message)
+  }
 }
 
 function statusBadge(s) {

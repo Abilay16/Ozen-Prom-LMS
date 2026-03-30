@@ -37,6 +37,11 @@
             <label class="text-sm font-medium text-gray-700">Длительность (ч)</label>
             <input v-model.number="form.duration_hours" type="number" class="input-field mt-1" />
           </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Целевые должности</label>
+            <input v-model="form.target_positions" class="input-field mt-1" placeholder="водитель, слесарь, электрик (через запятую)" />
+            <p class="text-xs text-gray-400 mt-1">Если поставить пустым — курс достанется всем, кому не подошёл другой курс</p>
+          </div>
         </div>
         <div class="flex gap-3 mt-4">
           <button @click="save" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
@@ -57,7 +62,10 @@
         </thead>
         <tbody>
           <tr v-for="c in courses" :key="c.id" class="border-b hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">{{ c.name }}</td>
+            <td class="px-4 py-3 font-medium">
+              {{ c.name }}
+              <div v-if="c.target_positions" class="text-xs text-blue-500 mt-0.5">Должн.: {{ c.target_positions }}</div>
+            </td>
             <td class="px-4 py-3">{{ c.discipline?.name }}</td>
             <td class="px-4 py-3 hidden md:table-cell">{{ c.duration_hours }}</td>
             <td class="px-4 py-3 flex gap-3">
@@ -96,13 +104,13 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  form.value = { discipline_id: '', name: '', description: '', duration_hours: 8 }
+  form.value = { discipline_id: '', name: '', description: '', duration_hours: 8, target_positions: '' }
   modal.value = true
 }
 
 function openEdit(c) {
   editing.value = c
-  form.value = { discipline_id: c.discipline_id, name: c.name, description: c.description, duration_hours: c.duration_hours }
+  form.value = { discipline_id: c.discipline_id, name: c.name, description: c.description || '', duration_hours: c.duration_hours, target_positions: c.target_positions || '' }
   modal.value = true
 }
 

@@ -32,6 +32,7 @@
             <th class="text-left px-4 py-3">Код</th>
             <th class="text-left px-4 py-3">Название</th>
             <th class="text-left px-4 py-3">Статус</th>
+            <th class="px-4 py-3"></th>
           </tr>
         </thead>
         <tbody>
@@ -40,6 +41,9 @@
             <td class="px-4 py-3">{{ d.name }}</td>
             <td class="px-4 py-3">
               <span :class="d.is_active ? 'badge-passed' : 'badge-failed'">{{ d.is_active ? 'Активна' : 'Неактивна' }}</span>
+            </td>
+            <td class="px-4 py-3">
+              <button @click="openEdit(d)" class="text-xs text-blue-600 hover:underline">Изменить</button>
             </td>
           </tr>
         </tbody>
@@ -66,6 +70,12 @@ async function load() {
 function openCreate() {
   editing.value = null
   form.value = { code: '', name: '' }
+  modal.value = true
+}
+
+function openEdit(d) {
+  editing.value = d
+  form.value = { code: d.code, name: d.name }
   modal.value = true
 }
 

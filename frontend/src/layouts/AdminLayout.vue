@@ -9,12 +9,9 @@
         <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
         <NavLink to="/admin/batches" icon="📂">Потоки обучения</NavLink>
         <NavLink to="/admin/users" icon="👥">Пользователи</NavLink>
-        <NavLink to="/admin/organizations" icon="🏢">Организации</NavLink>
         <div class="border-t border-white/10 my-2"/>
-        <NavLink to="/admin/courses" icon="📚">Курсы</NavLink>
         <NavLink to="/admin/disciplines" icon="🏷️">Дисциплины</NavLink>
-        <NavLink to="/admin/positions" icon="👷">Должности</NavLink>
-        <NavLink to="/admin/rules" icon="⚙️">Правила назначений</NavLink>
+        <NavLink to="/admin/courses" icon="📚">Курсы</NavLink>
         <div class="border-t border-white/10 my-2"/>
         <NavLink to="/admin/progress" icon="📈">Прогресс</NavLink>
         <NavLink to="/admin/exports" icon="⬇️">Экспорт</NavLink>
@@ -22,7 +19,7 @@
 
       <!-- User info at bottom -->
       <div class="absolute bottom-0 w-64 p-4 border-t border-white/10">
-        <div class="text-sm text-gray-300">{{ auth.fullName }}</div>
+        <div class="text-sm text-gray-300">{{ fullName }}</div>
         <button @click="handleLogout" class="text-xs text-red-300 hover:text-red-100 mt-1">Выйти</button>
       </div>
     </aside>
@@ -46,15 +43,14 @@
 <script setup>
 import { ref, h } from 'vue'
 import { RouterView, RouterLink, useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
-const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const sidebarOpen = ref(false)
+const fullName = localStorage.getItem('full_name') || ''
 
 function handleLogout() {
-  auth.logout()
+  localStorage.clear()
   router.push('/login')
 }
 

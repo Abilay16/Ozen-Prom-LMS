@@ -20,6 +20,7 @@ class UserOut(BaseModel):
     organization_id: Optional[UUID]
     position_raw: Optional[str]
     is_active: bool
+    plain_password: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -27,6 +28,13 @@ class UserOut(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     new_password: str
+
+
+@router.get("/count")
+async def count_users(db: DB, admin: CurrentAdmin):
+    from sqlalchemy import func
+    result = await db.execute(select(func.count()).select_from(User))
+    return {"count": result.scalar()}
 
 
 @router.get("")
@@ -51,16 +59,29 @@ async def list_users(
     return result.scalars().all()
 
 
+class UpdateUserRequest(BaseModel):
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    position_raw: Optional[str] = None
+    new_password: Optional[str] = None
+
+
 @router.patch("/{user_id}")
-async def update_user(user_id: UUID, data: dict, db: DB, admin: CurrentAdmin):
+async def update_user(user_id: UUID, data: UpdateUserRequest, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise NotFoundError("User not found")
-    allowed = {"full_name", "is_active", "position_raw"}
-    for k, v in data.items():
-        if k in allowed:
-            setattr(user, k, v)
+    if data.full_name is not None:
+        user.full_name = data.full_name
+        user.normalized_full_name = data.full_name.strip().lower()
+    if data.is_active is not None:
+        user.is_active = data.is_active
+    if data.position_raw is not None:
+        user.position_raw = data.position_raw
+    if data.new_password:
+        user.password_hash = hash_password(data.new_password)
+        user.plain_password = data.new_password
     return user
 
 
@@ -71,4 +92,5 @@ async def reset_password(user_id: UUID, body: ResetPasswordRequest, db: DB, admi
     if not user:
         raise NotFoundError("User not found")
     user.password_hash = hash_password(body.new_password)
+    user.plain_password = body.new_password
     return {"message": "Password updated"}

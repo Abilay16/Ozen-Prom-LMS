@@ -5,7 +5,7 @@
       <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
         <span class="font-semibold text-brand-dark">Озен-Пром LMS</span>
         <div class="flex items-center gap-4">
-          <span class="text-sm text-gray-600">{{ auth.fullName }}</span>
+          <span class="text-sm text-gray-600">{{ fullName }}</span>
           <button @click="handleLogout" class="text-sm text-red-500 hover:text-red-700">Выйти</button>
         </div>
       </div>
@@ -18,14 +18,13 @@
 </template>
 
 <script setup>
-import { RouterView, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
-const auth = useAuthStore()
 const router = useRouter()
+const fullName = localStorage.getItem('full_name') || ''
 
 function handleLogout() {
-  auth.logout()
+  localStorage.clear()
   router.push('/login')
 }
 </script>

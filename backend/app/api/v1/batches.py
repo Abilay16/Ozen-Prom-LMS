@@ -24,16 +24,27 @@ async def list_batches(db: DB, admin: CurrentAdmin):
         select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
     )
     batches = result.scalars().all()
-    # Enrich with discipline names
-    out = []
+
+    # Collect all discipline IDs in one query
+    all_disc_ids = set()
     for b in batches:
-        disc_names = []
         if b.discipline_ids:
             for did in b.discipline_ids:
-                r = await db.execute(select(Discipline).where(Discipline.id == did))
-                d = r.scalar_one_or_none()
-                if d:
-                    disc_names.append(d.name)
+                all_disc_ids.add(did)
+
+    disc_map: dict = {}
+    if all_disc_ids:
+        from sqlalchemy import cast
+        from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+        disc_result = await db.execute(
+            select(Discipline).where(Discipline.id.in_(list(all_disc_ids)))
+        )
+        for d in disc_result.scalars().all():
+            disc_map[str(d.id)] = d.name
+
+    out = []
+    for b in batches:
+        disc_names = [disc_map[str(did)] for did in (b.discipline_ids or []) if str(did) in disc_map]
         out.append({
             "id": b.id,
             "name": b.name,
@@ -74,19 +85,21 @@ async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):
         select(ImportRow).where(ImportRow.batch_id == batch_id)
     )
     rows = rows_result.scalars().all()
-    disc_names = []
+    disc_names_detail = []
     if batch.discipline_ids:
-        for did in batch.discipline_ids:
-            r = await db.execute(select(Discipline).where(Discipline.id == did))
-            d = r.scalar_one_or_none()
-            if d:
-                disc_names.append({"id": str(d.id), "name": d.name})
+        disc_result = await db.execute(
+            select(Discipline).where(Discipline.id.in_(batch.discipline_ids))
+        )
+        disc_names_detail = [
+            {"id": str(d.id), "name": d.name}
+            for d in disc_result.scalars().all()
+        ]
     return {
         "id": batch.id,
         "name": batch.name,
         "status": batch.status,
         "discipline_ids": batch.discipline_ids,
-        "disciplines": disc_names,
+        "disciplines": disc_names_detail,
         "notes": batch.notes,
         "created_at": batch.created_at,
         "excel_file_path": batch.excel_file_path,
@@ -151,5 +164,6 @@ async def confirm_import(batch_id: UUID, db: DB, admin: CurrentAdmin):
 
     processor = ImportRowProcessor(db)
     summary = await processor.process_batch(batch)
-    batch.status = BatchStatus.completed
+    if "error" not in summary:
+        batch.status = BatchStatus.completed
     return summary
