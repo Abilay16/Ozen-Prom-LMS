@@ -38,7 +38,7 @@ class ImportParserService:
         try:
             df = pd.read_excel(file_path, dtype=str)
         except Exception as e:
-            return {"error": str(e), "rows": [], "column_mapping": {}}
+            return {"parse_error": str(e), "rows": [], "column_mapping": {}}
 
         df = df.fillna("")
         headers = list(df.columns)

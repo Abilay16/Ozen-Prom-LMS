@@ -19,7 +19,10 @@
           <span class="text-xs text-gray-400">{{ assignment.discipline?.name }}</span>
         </div>
         <h3 class="font-semibold text-gray-900 mb-1">{{ assignment.course?.name }}</h3>
-        <p class="text-sm text-gray-500 mb-4">{{ assignment.course?.description }}</p>
+        <p class="text-sm text-gray-500 mb-3">{{ assignment.course?.description }}</p>
+        <div v-if="bestScore(assignment) !== null" class="text-sm text-gray-600 mb-3">
+          Лучший результат: <strong :class="assignment.status === 'passed' ? 'text-green-600' : 'text-red-500'">{{ bestScore(assignment) }}%</strong>
+        </div>
         <RouterLink
           :to="`/my/courses/${assignment.id}`"
           class="btn-primary text-sm inline-block"
@@ -66,5 +69,13 @@ function statusLabel(status) {
     failed: 'Не сдан',
   }
   return map[status] || status
+}
+
+function bestScore(assignment) {
+  if (!assignment.attempts?.length) return null
+  const scores = assignment.attempts
+    .filter(a => a.score_percent !== null && a.score_percent !== undefined)
+    .map(a => a.score_percent)
+  return scores.length ? Math.max(...scores) : null
 }
 </script>

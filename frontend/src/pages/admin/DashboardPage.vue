@@ -2,7 +2,7 @@
   <div>
     <h1 class="text-2xl font-bold mb-6">Дашборд</h1>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
       <div class="card text-center">
         <div class="text-3xl font-bold text-brand-mid">{{ stats.users }}</div>
         <div class="text-sm text-gray-500 mt-1">Пользователей</div>
@@ -18,6 +18,10 @@
       <div class="card text-center">
         <div class="text-3xl font-bold text-yellow-500">{{ stats.inProgress }}</div>
         <div class="text-sm text-gray-500 mt-1">В процессе</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-3xl font-bold text-red-500">{{ stats.failed }}</div>
+        <div class="text-sm text-gray-500 mt-1">Не сдали</div>
       </div>
     </div>
 
@@ -37,19 +41,16 @@ import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/services/api'
 
-const stats = ref({ users: 0, batches: 0, passed: 0, inProgress: 0 })
+const stats = ref({ users: 0, batches: 0, passed: 0, inProgress: 0, failed: 0 })
 
 onMounted(async () => {
   try {
-    const [usersRes, batchesRes, progressRes] = await Promise.all([
-      api.get('/admin/users?limit=1'),
-      api.get('/admin/batches'),
-      api.get('/admin/progress?limit=500'),
-    ])
-    stats.value.batches = batchesRes.data.length || 0
-    const progress = progressRes.data || []
-    stats.value.passed = progress.filter(a => a.status === 'passed').length
-    stats.value.inProgress = progress.filter(a => a.status === 'in_progress').length
+    const { data } = await api.get('/admin/progress/stats')
+    stats.value.users = data.users || 0
+    stats.value.batches = data.batches || 0
+    stats.value.passed = data.passed || 0
+    stats.value.inProgress = data.in_progress || 0
+    stats.value.failed = data.failed || 0
   } catch {}
 })
 </script>

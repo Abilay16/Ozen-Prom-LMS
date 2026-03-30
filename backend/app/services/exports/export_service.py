@@ -1,17 +1,13 @@
-"""
-Export service.
-Generates XLSX workbooks for 3 export types.
-"""
-from uuid import UUID
+﻿from uuid import UUID
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.models.import_row import ImportRow, ImportRowStatus
+from app.models.import_row import ImportRow
 from app.models.assignment import UserCourseAssignment
-from app.models.attempt import TestAttempt, AttemptStatus
+from app.models.attempt import AttemptStatus
 from app.models.user import User
 
 
@@ -25,6 +21,9 @@ def _style_header(ws, headers: list[str]):
         cell.font = HEADER_FONT
         cell.fill = HEADER_FILL
         cell.alignment = Alignment(horizontal="center")
+    for col in ws.columns:
+        max_len = max((len(str(c.value or "")) for c in col), default=10)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
 
 
 class ExportService:
@@ -32,42 +31,39 @@ class ExportService:
         self.db = db
 
     async def export_logins_passwords(self, batch_id: UUID) -> Workbook:
-        """Export #1: logins + initial passwords (from import_rows)."""
         wb = Workbook()
         ws = wb.active
         ws.title = "Доступы"
-        _style_header(ws, ["ФИО", "Логин", "Пароль", "Организация", "Должность"])
+        _style_header(ws, ["№", "ФИО", "Логин", "Пароль", "Организация", "Должность", "Назначенные курсы"])
 
         result = await self.db.execute(
             select(ImportRow)
             .options(selectinload(ImportRow.user))
-            .where(
-                ImportRow.batch_id == batch_id,
-                ImportRow.status == ImportRowStatus.ok,
-                ImportRow.user_id.isnot(None),
-            )
+            .where(ImportRow.batch_id == batch_id, ImportRow.user_id.isnot(None))
+            .order_by(ImportRow.row_number)
         )
         rows = result.scalars().all()
 
-        for row in rows:
+        for i, row in enumerate(rows, 1):
             u = row.user
             nd = row.normalized_data or {}
+            assigned = nd.get("assigned", [])
             ws.append([
+                i,
                 u.full_name if u else nd.get("full_name", ""),
                 u.login if u else "",
-                "(сброс через админку)",  # password not stored in plain
+                nd.get("password", ""),
                 nd.get("organization", ""),
                 u.position_raw if u else nd.get("position", ""),
+                ", ".join(assigned) if isinstance(assigned, list) else str(assigned),
             ])
 
         return wb
 
     async def export_all_results(self) -> Workbook:
-        """Export #2: all assignment results."""
         return await self._build_results_workbook(batch_id=None)
 
     async def export_batch_results(self, batch_id: UUID) -> Workbook:
-        """Export #3: results for a specific batch."""
         return await self._build_results_workbook(batch_id=batch_id)
 
     async def _build_results_workbook(self, batch_id: UUID | None) -> Workbook:
@@ -75,19 +71,27 @@ class ExportService:
         ws = wb.active
         ws.title = "Результаты"
         _style_header(ws, [
-            "ФИО", "Организация", "Должность",
+            "№", "ФИО", "Логин", "Организация", "Должность",
             "Дисциплина", "Курс", "Статус",
-            "% результат", "Сдал/не сдал", "Дата прохождения"
+            "Лучший результат (%)", "Сдал?", "Дата завершения"
         ])
+
+        STATUS_RU = {
+            "assigned": "Назначен",
+            "in_progress": "В процессе",
+            "passed": "Сдан",
+            "failed": "Не сдан",
+        }
 
         q = (
             select(UserCourseAssignment)
             .options(
-                selectinload(UserCourseAssignment.user),
+                selectinload(UserCourseAssignment.user).selectinload(User.organization),
                 selectinload(UserCourseAssignment.course),
                 selectinload(UserCourseAssignment.discipline),
                 selectinload(UserCourseAssignment.attempts),
             )
+            .order_by(UserCourseAssignment.assigned_at)
         )
         if batch_id:
             q = q.where(UserCourseAssignment.batch_id == batch_id)
@@ -95,7 +99,7 @@ class ExportService:
         result = await self.db.execute(q)
         assignments = result.scalars().all()
 
-        for a in assignments:
+        for i, a in enumerate(assignments, 1):
             u = a.user
             best_attempt = None
             if a.attempts:
@@ -103,15 +107,18 @@ class ExportService:
                 if completed:
                     best_attempt = max(completed, key=lambda x: x.score_percent or 0)
 
+            status_str = a.status.value if hasattr(a.status, "value") else str(a.status)
             ws.append([
+                i,
                 u.full_name if u else "",
-                "",  # organization — join if needed
+                u.login if u else "",
+                u.organization.name if (u and u.organization) else "",
                 u.position_raw if u else "",
                 a.discipline.name if a.discipline else "",
                 a.course.name if a.course else "",
-                a.status.value,
+                STATUS_RU.get(status_str, status_str),
                 best_attempt.score_percent if best_attempt else "",
-                "Да" if (best_attempt and best_attempt.passed) else "Нет" if best_attempt else "",
+                "Да" if (best_attempt and best_attempt.passed) else ("Нет" if best_attempt else ""),
                 a.completed_at.strftime("%d.%m.%Y") if a.completed_at else "",
             ])
 

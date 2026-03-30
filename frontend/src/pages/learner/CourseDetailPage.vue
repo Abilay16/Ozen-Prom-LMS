@@ -17,30 +17,64 @@
     <div class="card mb-6">
       <h2 class="font-semibold text-lg mb-4">Материалы курса</h2>
       <div v-if="!assignment.course?.materials?.length" class="text-gray-400 text-sm">Материалы не добавлены</div>
-      <ul class="space-y-3">
-        <li v-for="mat in assignment.course?.materials" :key="mat.id" class="flex items-center gap-3">
-          <span class="text-xl">{{ materialIcon(mat.material_type) }}</span>
-          <div class="flex-1">
-            <div class="font-medium text-sm">{{ mat.title }}</div>
-            <div class="text-xs text-gray-400">{{ mat.material_type }}</div>
+      <div class="space-y-4">
+        <div v-for="mat in assignment.course?.materials" :key="mat.id">
+          <!-- Video embed for YouTube/Vimeo -->
+          <div v-if="mat.material_type === 'video_url' && mat.url">
+            <div class="font-medium text-sm mb-2">{{ materialIcon(mat.material_type) }} {{ mat.title }}</div>
+            <div v-if="youtubeId(mat.url)" class="aspect-video rounded overflow-hidden bg-black">
+              <iframe
+                :src="`https://www.youtube.com/embed/${youtubeId(mat.url)}`"
+                class="w-full h-full"
+                frameborder="0"
+                allowfullscreen
+              ></iframe>
+            </div>
+            <a v-else :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть видео ↗</a>
           </div>
-          <a
-            v-if="mat.file_path"
-            :href="`/api/v1/learner/materials/${mat.id}/download`"
-            class="text-sm text-brand-mid hover:underline"
-          >Скачать</a>
-          <a v-else-if="mat.url" :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть</a>
-        </li>
-      </ul>
+          <!-- External link -->
+          <div v-else-if="mat.material_type === 'external_link' && mat.url" class="flex items-center gap-3">
+            <span class="text-xl">{{ materialIcon(mat.material_type) }}</span>
+            <div class="flex-1">
+              <div class="font-medium text-sm">{{ mat.title }}</div>
+            </div>
+            <a :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть ↗</a>
+          </div>
+          <!-- Downloadable file -->
+          <div v-else class="flex items-center gap-3">
+            <span class="text-xl">{{ materialIcon(mat.material_type) }}</span>
+            <div class="flex-1">
+              <div class="font-medium text-sm">{{ mat.title }}</div>
+              <div class="text-xs text-gray-400">{{ mat.material_type }}</div>
+            </div>
+            <a
+              v-if="mat.file_path"
+              href="#"
+              @click.prevent="downloadMaterial(mat)"
+              class="text-sm text-brand-mid hover:underline"
+            >Скачать</a>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Test section -->
     <div class="card">
       <h2 class="font-semibold text-lg mb-2">Тест</h2>
-      <div v-if="assignment.status === 'passed'" class="text-green-600 font-medium mb-4">✓ Тест пройден</div>
-      <div v-else-if="assignment.status === 'failed'" class="text-red-500 font-medium mb-4">Попытки исчерпаны</div>
+      <div v-if="assignment.status === 'passed'" class="text-green-600 font-medium mb-4">
+        ✓ Тест пройден
+        <span v-if="assignment.course?.test?.pass_score" class="text-sm text-gray-400 ml-2">(проходной балл: {{ assignment.course.test.pass_score }}%)</span>
+      </div>
+      <div v-else-if="assignment.status === 'failed'" class="text-red-500 font-medium mb-4">
+        Попытки исчерпаны ({{ completedAttempts }} из {{ assignment.course.test?.max_attempts || '∞' }})
+      </div>
       <div v-else>
-        <p class="text-sm text-gray-600 mb-4">После изучения материалов пройдите тест для завершения курса.</p>
+        <p class="text-sm text-gray-600 mb-3">После изучения материалов пройдите тест для завершения курса.</p>
+        <div v-if="assignment.course?.test" class="text-sm text-gray-500 mb-4 flex gap-4">
+          <span>Попытка <strong>{{ completedAttempts + 1 }}</strong> из <strong>{{ assignment.course.test.max_attempts > 0 ? assignment.course.test.max_attempts : '∞' }}</strong></span>
+          <span>Проходной балл: <strong>{{ assignment.course.test.pass_score }}%</strong></span>
+          <span v-if="assignment.course.test.time_limit_minutes > 0">Время: <strong>{{ assignment.course.test.time_limit_minutes }} мин</strong></span>
+        </div>
         <button @click="startTest" :disabled="starting" class="btn-primary">
           {{ starting ? 'Запуск...' : 'Начать тест' }}
         </button>
@@ -50,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
 
@@ -59,6 +93,10 @@ const router = useRouter()
 const assignment = ref(null)
 const loading = ref(true)
 const starting = ref(false)
+
+const completedAttempts = computed(() =>
+  assignment.value?.attempts?.filter(a => a.status === 'completed').length ?? 0
+)
 
 onMounted(async () => {
   try {
@@ -73,7 +111,10 @@ async function startTest() {
   starting.value = true
   try {
     const { data } = await api.post(`/learner/me/courses/${route.params.id}/start-test`)
-    router.push(`/my/test/${data.attempt_id}`)
+    sessionStorage.setItem('testData_' + data.attempt_id, JSON.stringify(data))
+    router.push({ path: `/my/test/${data.attempt_id}`, state: { testData: data } })
+  } catch (e) {
+    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
   } finally {
     starting.value = false
   }
@@ -82,6 +123,27 @@ async function startTest() {
 function materialIcon(type) {
   const icons = { video_file: '🎬', video_url: '▶️', pdf: '📄', docx: '📝', image: '🖼️', external_link: '🔗' }
   return icons[type] || '📎'
+}
+
+function youtubeId(url) {
+  if (!url) return null
+  // Handles youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/)
+  return m ? m[1] : null
+}
+
+async function downloadMaterial(mat) {
+  try {
+    const { data, headers } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
+    const url = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = mat.title || 'file'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    alert('Не удалось скачать файл')
+  }
 }
 function statusBadge(s) {
   return { assigned: 'badge-assigned', in_progress: 'badge-progress', passed: 'badge-passed', failed: 'badge-failed' }[s] || 'badge-assigned'
