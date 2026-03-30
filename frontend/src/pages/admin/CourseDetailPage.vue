@@ -43,9 +43,21 @@
                 <input ref="matFileInput" type="file" @change="e => matFile = e.target.files[0]" class="input-field mt-1" />
               </div>
             </div>
+            <!-- Upload progress -->
+            <div v-if="uploading" class="mt-3">
+              <div class="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Загрузка файла...</span>
+                <span>{{ uploadProgress }}%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="bg-blue-600 h-2 rounded-full transition-all duration-200" :style="{ width: uploadProgress + '%' }"></div>
+              </div>
+            </div>
             <div class="flex gap-3 mt-4">
-              <button @click="uploadMaterial" class="btn-primary">Загрузить</button>
-              <button @click="materialModal = false" class="btn-secondary">Отмена</button>
+              <button @click="uploadMaterial" :disabled="uploading" class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ uploading ? 'Загрузка...' : 'Загрузить' }}
+              </button>
+              <button @click="materialModal = false" :disabled="uploading" class="btn-secondary disabled:opacity-50">Отмена</button>
             </div>
           </div>
         </div>
@@ -153,6 +165,8 @@ const questionModal = ref(false)
 const matFile = ref(null)
 const matFileInput = ref(null)
 const wordInput = ref(null)
+const uploading = ref(false)
+const uploadProgress = ref(0)
 const wordWarnings = ref([])
 const matForm = ref({ title: '', material_type: 'pdf', url: '' })
 
@@ -183,8 +197,15 @@ async function uploadMaterial() {
   fd.append('material_type', matForm.value.material_type)
   if (matForm.value.url) fd.append('url', matForm.value.url)
   if (matFile.value) fd.append('file', matFile.value)
+  uploading.value = true
+  uploadProgress.value = 0
   try {
-    await api.post(`/admin/materials/courses/${courseId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    await api.post(`/admin/materials/courses/${courseId}`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (evt) => {
+        if (evt.total) uploadProgress.value = Math.round((evt.loaded / evt.total) * 100)
+      }
+    })
     materialModal.value = false
     matForm.value = { title: '', material_type: 'pdf', url: '' }
     matFile.value = null
@@ -193,6 +214,9 @@ async function uploadMaterial() {
     materials.value = data
   } catch (e) {
     alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    uploading.value = false
+    uploadProgress.value = 0
   }
 }
 
