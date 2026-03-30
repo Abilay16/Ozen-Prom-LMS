@@ -52,11 +52,9 @@ services:
     volumes:
       - ./docker/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/certs:/etc/nginx/certs:ro
-      - frontend_static:/usr/share/nginx/html
     depends_on:
       - backend
       - frontend
 
 volumes:
   postgres_data:
-  frontend_static:
