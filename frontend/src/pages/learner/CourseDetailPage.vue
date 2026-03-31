@@ -81,6 +81,7 @@
                 v-else-if="mat.material_type === 'video_file'"
                 :src="viewerSrcs[mat.id]"
                 controls
+                preload="metadata"
                 class="w-full bg-black"
                 style="max-height: 70vh;"
               ></video>
@@ -174,15 +175,21 @@ async function toggleViewer(mat) {
     return
   }
   if (!viewerSrcs.value[mat.id]) {
-    viewerLoading.value = { ...viewerLoading.value, [mat.id]: true }
-    try {
-      const { data } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
-      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: URL.createObjectURL(data) }
-    } catch {
-      alert('Не удалось загрузить файл')
-      return
-    } finally {
-      viewerLoading.value = { ...viewerLoading.value, [mat.id]: false }
+    if (mat.material_type === 'video_file') {
+      // Direct streaming URL — browser handles Range requests itself (no full download)
+      const token = localStorage.getItem('access_token')
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
+    } else {
+      viewerLoading.value = { ...viewerLoading.value, [mat.id]: true }
+      try {
+        const { data } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
+        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: URL.createObjectURL(data) }
+      } catch {
+        alert('Не удалось загрузить файл')
+        return
+      } finally {
+        viewerLoading.value = { ...viewerLoading.value, [mat.id]: false }
+      }
     }
   }
   viewerMatId.value = mat.id
