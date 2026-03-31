@@ -190,10 +190,12 @@ async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
 
 @router.get("/materials/{material_id}/stream")
 async def stream_material(material_id: UUID, token: str, db: DB):
-    """Video streaming — accepts JWT as query param for <video src> browser compatibility."""
+    """Video streaming via X-Accel-Redirect — nginx serves the file directly, Python only checks auth."""
     import os, mimetypes
+    from fastapi.responses import Response
     from app.core.security import decode_token
     from app.core.exceptions import UnauthorizedError
+    from app.core.config import settings
 
     payload = decode_token(token)
     if not payload or payload.get("type") != "access" or payload.get("role") != "learner":
@@ -208,8 +210,17 @@ async def stream_material(material_id: UUID, token: str, db: DB):
 
     filename = os.path.basename(material.file_path)
     media_type, _ = mimetypes.guess_type(filename)
-    # FileResponse + Starlette handles Accept-Ranges / Range requests automatically
-    return FileResponse(
-        material.file_path,
-        media_type=media_type or "video/mp4",
+
+    # Strip the backend storage prefix and build the nginx internal path
+    relative_path = material.file_path[len(settings.STORAGE_LOCAL_PATH):]
+    x_accel_path = "/internal/storage" + relative_path
+
+    # Return empty body with X-Accel-Redirect — nginx intercepts and serves the file natively
+    return Response(
+        status_code=200,
+        headers={
+            "X-Accel-Redirect": x_accel_path,
+            "Content-Type": media_type or "video/mp4",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
     )

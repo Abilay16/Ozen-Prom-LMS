@@ -52,6 +52,7 @@ services:
     volumes:
       - ./docker/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/certs:/etc/nginx/certs:ro
+      - ./storage:/storage:ro
     depends_on:
       - backend
       - frontend
