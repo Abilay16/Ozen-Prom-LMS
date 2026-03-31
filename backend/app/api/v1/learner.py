@@ -181,4 +181,35 @@ async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
         raise NotFoundError("Material not found")
     if not os.path.exists(material.file_path):
         raise NotFoundError("File not found on disk")
-    return FileResponse(material.file_path, filename=os.path.basename(material.file_path))
+    return FileResponse(
+        material.file_path,
+        filename=os.path.basename(material.file_path),
+        content_disposition_type="attachment",
+    )
+
+
+@router.get("/materials/{material_id}/stream")
+async def stream_material(material_id: UUID, token: str, db: DB):
+    """Video streaming — accepts JWT as query param for <video src> browser compatibility."""
+    import os, mimetypes
+    from app.core.security import decode_token
+    from app.core.exceptions import UnauthorizedError
+
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access" or payload.get("role") != "learner":
+        raise UnauthorizedError()
+
+    result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
+    material = result.scalar_one_or_none()
+    if not material or not material.file_path:
+        raise NotFoundError("Material not found")
+    if not os.path.exists(material.file_path):
+        raise NotFoundError("File not found on disk")
+
+    filename = os.path.basename(material.file_path)
+    media_type, _ = mimetypes.guess_type(filename)
+    # FileResponse + Starlette handles Accept-Ranges / Range requests automatically
+    return FileResponse(
+        material.file_path,
+        media_type=media_type or "video/mp4",
+    )
