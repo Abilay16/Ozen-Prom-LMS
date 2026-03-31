@@ -190,11 +190,13 @@ async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
 
 @router.get("/materials/{material_id}/stream")
 async def stream_material(material_id: UUID, token: str, db: DB):
-    """Video streaming — accepts JWT as query param for <video src> browser compatibility.
-    Starlette FileResponse supports Range requests natively — browser gets only the chunk it needs."""
+    """Video streaming via X-Accel-Redirect — nginx serves the file directly, Python only checks auth."""
     import os, mimetypes
+    from urllib.parse import quote
+    from fastapi.responses import Response
     from app.core.security import decode_token
     from app.core.exceptions import UnauthorizedError
+    from app.core.config import settings
 
     payload = decode_token(token)
     if not payload or payload.get("type") != "access" or payload.get("role") != "learner":
@@ -209,8 +211,18 @@ async def stream_material(material_id: UUID, token: str, db: DB):
 
     filename = os.path.basename(material.file_path)
     media_type, _ = mimetypes.guess_type(filename)
-    return FileResponse(
-        material.file_path,
-        media_type=media_type or "video/mp4",
-        content_disposition_type="inline",
+
+    # Build X-Accel-Redirect path with URL-encoding for Cyrillic/special chars
+    relative_path = material.file_path[len(settings.STORAGE_LOCAL_PATH):]
+    # URL-encode each path segment to handle Cyrillic filenames
+    encoded_path = "/".join(quote(seg, safe="") for seg in relative_path.replace("\\", "/").split("/"))
+    x_accel_path = "/internal/storage" + encoded_path
+
+    return Response(
+        status_code=200,
+        headers={
+            "X-Accel-Redirect": x_accel_path,
+            "Content-Type": media_type or "video/mp4",
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
     )

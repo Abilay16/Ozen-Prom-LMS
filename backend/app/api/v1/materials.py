@@ -29,9 +29,13 @@ async def add_material(
     file_size = None
 
     if file:
+        import uuid
         mat_dir = os.path.join(settings.STORAGE_LOCAL_PATH, "materials", str(course_id))
         os.makedirs(mat_dir, exist_ok=True)
-        file_path = os.path.join(mat_dir, file.filename)
+        # Use UUID filename to avoid Cyrillic/special chars breaking nginx X-Accel-Redirect
+        ext = os.path.splitext(file.filename)[1].lower() if file.filename else ''
+        safe_name = str(uuid.uuid4()) + ext
+        file_path = os.path.join(mat_dir, safe_name)
         content = await file.read()
         file_size = len(content)
         async with aiofiles.open(file_path, "wb") as f:
