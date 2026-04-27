@@ -12,18 +12,7 @@
 
 ## Скриншоты
 
-<p align="center">
-  <img src="Screenshots/Снимок экрана 2026-03-25 185757.png" width="48%" />
-  <img src="Screenshots/Снимок экрана 2026-03-25 185808.png" width="48%" />
-</p>
-<p align="center">
-  <img src="Screenshots/Снимок экрана 2026-03-25 185820.png" width="48%" />
-  <img src="Screenshots/Снимок экрана 2026-03-25 185836.png" width="48%" />
-</p>
-<p align="center">
-  <img src="Screenshots/Снимок экрана 2026-03-25 185900.png" width="48%" />
-  <img src="Screenshots/Снимок экрана 2026-03-25 185924.png" width="48%" />
-</p>
+> _Скриншоты будут добавлены в ближайшее время_
 
 ---
 
