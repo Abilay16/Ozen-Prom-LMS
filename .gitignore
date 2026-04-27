@@ -68,3 +68,9 @@ docker/nginx/certs/
 # Logs
 *.log
 logs/
+
+# Internal docs / screenshots (not for public repo)
+Screenshots/
+TZ_agent_Ozen_Prom_LMS.docx
+TZ_agent_Ozen_Prom_LMS_v2.md
+Final_vision_of_project.md
