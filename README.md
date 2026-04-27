@@ -1,18 +1,61 @@
-# Ozen-Prom LMS
+# Özen Prom LMS
 
-Корпоративная LMS-система для Оzen Prom — обучение, тестирование и контроль знаний сотрудников в сфере промышленной безопасности.
+> Корпоративная система дистанционного обучения (LMS) для промышленного предприятия.  
+> Обучение сотрудников, тестирование знаний по охране труда и промышленной безопасности, контроль результатов.
+
+![Vue 3](https://img.shields.io/badge/Vue-3.4-42b883?logo=vue.js&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ed?logo=docker&logoColor=white)
 
 ---
 
-## Стек
+## Скриншоты
+
+<p align="center">
+  <img src="Screenshots/Снимок экрана 2026-03-25 185757.png" width="48%" />
+  <img src="Screenshots/Снимок экрана 2026-03-25 185808.png" width="48%" />
+</p>
+<p align="center">
+  <img src="Screenshots/Снимок экрана 2026-03-25 185820.png" width="48%" />
+  <img src="Screenshots/Снимок экрана 2026-03-25 185836.png" width="48%" />
+</p>
+<p align="center">
+  <img src="Screenshots/Снимок экрана 2026-03-25 185900.png" width="48%" />
+  <img src="Screenshots/Снимок экрана 2026-03-25 185924.png" width="48%" />
+</p>
+
+---
+
+## Возможности
+
+### Администратор
+- Управление организациями, дисциплинами, курсами и материалами (PDF, видео, изображения, Word, ссылки)
+- Создание тестов с вопросами и вариантами ответов
+- Управление пользователями и потоками обучения
+- Правила назначения курсов по должности / дисциплине
+- **Excel-импорт сотрудников** — загрузка списка с превью и автоматическим назначением курсов
+- Экспорт прогресса в Excel
+- Сброс паролей
+
+### Ученик (learner)
+- Личный кабинет с назначенными курсами
+- Просмотр материалов прямо в браузере (PDF, видео-стриминг, изображения)
+- Прохождение тестов с попытками и результатами
+- История тестирования
+
+---
+
+## Технологии
 
 | Слой | Технологии |
 |---|---|
 | Backend | FastAPI 0.115, SQLAlchemy 2 (async), Alembic, PostgreSQL 15 |
-| Frontend | Vue 3.4, Vite 5, Tailwind CSS 3.4, Pinia, Axios |
-| Auth | JWT (access + refresh), bcrypt |
+| Frontend | Vue 3.4, Vite 5, Tailwind CSS 3, Pinia, Axios |
+| Auth | JWT (access + refresh tokens), bcrypt |
 | Excel | pandas + openpyxl |
-| Инфраструктура | Docker Compose, Nginx |
+| Видео | Nginx X-Accel-Redirect (стриминг с поддержкой Range) |
+| Инфраструктура | Docker Compose, Nginx, Let's Encrypt (SSL) |
 
 ---
 
@@ -83,13 +126,34 @@ docker compose exec backend alembic upgrade head
 ## Деплой на продакшн (VPS)
 
 ```bash
-# Скопировать .env.prod и настроить
+# На сервере: клонировать и настроить
+git clone https://github.com/Abilay16/Ozen-Prom-LMS.git /opt/ozen-lms
+cd /opt/ozen-lms
 cp .env.example .env
-# Поднять прод-стек
+# Заполнить .env: POSTGRES_PASSWORD, SECRET_KEY, ALLOWED_ORIGINS
+
+# Запустить прод-стек
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Nginx слушает порт 80. SSL добавляется через Let's Encrypt (Certbot) — конфиг закомментирован в `docker/nginx/nginx.prod.conf`.
+### SSL (Let's Encrypt)
+
+```bash
+# Остановить nginx, получить сертификат
+systemctl stop nginx
+certbot certonly --standalone -d yourdomain.com
+# Скопировать сертификаты
+cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem docker/nginx/certs/
+cp /etc/letsencrypt/live/yourdomain.com/privkey.pem docker/nginx/certs/
+# Запустить
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Создать первого администратора
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend python -m scripts.seed_admin
+```
 
 ---
 
