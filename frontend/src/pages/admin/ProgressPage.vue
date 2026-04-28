@@ -72,7 +72,7 @@
             </td>
             <td class="px-4 py-3">
               <button
-                v-if="row.status === 'failed'"
+                v-if="row.status === 'failed' || row.status === 'in_progress'"
                 @click="allowRetake(row.id)"
                 class="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded font-medium"
               >↺ Пересдача</button>
