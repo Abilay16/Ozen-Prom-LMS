@@ -2,15 +2,37 @@ from uuid import UUID
 from typing import Optional
 from datetime import date
 from fastapi import APIRouter, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
-from app.models.attempt import AttemptStatus
+from app.models.attempt import TestAttempt, AttemptStatus
 from app.models.user import User
+from app.core.exceptions import NotFoundError
 
 router = APIRouter()
+
+
+@router.post("/{assignment_id}/allow-retake", status_code=200)
+async def allow_retake(assignment_id: UUID, db: DB, admin: CurrentAdmin):
+    """Reset a failed assignment so the learner can retake the test."""
+    result = await db.execute(
+        select(UserCourseAssignment).where(UserCourseAssignment.id == assignment_id)
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise NotFoundError("Assignment not found")
+
+    # Delete all previous attempts so attempt count resets
+    await db.execute(
+        delete(TestAttempt).where(TestAttempt.assignment_id == assignment_id)
+    )
+
+    assignment.status = AssignmentStatus.assigned
+    assignment.completed_at = None
+    await db.flush()
+    return {"ok": True}
 
 
 @router.get("/stats")
