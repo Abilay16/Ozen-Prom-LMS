@@ -123,10 +123,11 @@
                 </div>
                 <div v-for="(opt, i) in qForm.options" :key="i" class="flex gap-2 items-center">
                   <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
-                  <label class="flex items-center gap-1 text-xs">
-                    <input type="checkbox" v-model="opt.is_correct" />
+                  <label class="flex items-center gap-1 text-xs whitespace-nowrap">
+                    <input type="radio" :name="'correct'" :value="i" v-model="qForm.correctIndex" />
                     Верный
                   </label>
+                  <button v-if="qForm.options.length > 2" @click="qForm.options.splice(i,1); if(qForm.correctIndex>=qForm.options.length) qForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
                 </div>
                 <button @click="qForm.options.push({ text: '', is_correct: false })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
               </div>
@@ -137,10 +138,18 @@
             </div>
           </div>
 
-          <ul class="space-y-1">
-            <li v-for="(q, i) in test.questions" :key="q.id" class="text-sm p-2 bg-gray-50 rounded">
-              <span class="font-medium">{{ i+1 }}. {{ q.text }}</span>
-              <span class="ml-1 text-xs text-gray-400">({{ q.options?.length || 0 }} вар.)</span>
+          <ul class="space-y-2">
+            <li v-for="(q, i) in test.questions" :key="q.id" class="text-sm p-3 bg-gray-50 rounded border border-gray-100">
+              <div class="flex justify-between items-start gap-2">
+                <span class="font-medium">{{ i+1 }}. {{ q.text }}</span>
+                <button @click="deleteQuestion(q.id)" class="text-xs text-red-400 hover:text-red-600 shrink-0">✕</button>
+              </div>
+              <ul class="mt-1 space-y-0.5 pl-3">
+                <li v-for="opt in q.options" :key="opt.id" class="text-xs flex items-center gap-1">
+                  <span :class="opt.is_correct ? 'text-green-600 font-bold' : 'text-gray-400'">{{ opt.is_correct ? '✓' : '○' }}</span>
+                  <span :class="opt.is_correct ? 'text-green-700' : 'text-gray-500'">{{ opt.text }}</span>
+                </li>
+              </ul>
             </li>
           </ul>
         </div>
@@ -174,7 +183,7 @@ const MAT_ICONS = {
   pdf: '📄', video_url: '▶️', video_file: '🎬', docx: '📊', image: '🖼️', external_link: '🔗',
 }
 function matIcon(t) { return MAT_ICONS[t] || '📎' }
-const qForm = ref({ text: '', options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: true }] })
+const qForm = ref({ text: '', correctIndex: 3, options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }] })
 
 onMounted(async () => {
   const [c, m, t] = await Promise.allSettled([
@@ -257,10 +266,28 @@ async function importFromWord(e) {
 }
 
 async function addQuestion() {
-  await api.post(`/admin/tests/${test.value.id}/questions`, qForm.value)
+  if (!qForm.value.text.trim()) { alert('Введите текст вопроса'); return }
+  const opts = qForm.value.options.filter(o => o.text.trim())
+  if (opts.length < 2) { alert('Нужно минимум 2 варианта ответа'); return }
+  // Apply correct answer from radio selection
+  const payload = {
+    text: qForm.value.text,
+    options: qForm.value.options
+      .map((o, i) => ({ text: o.text.trim(), is_correct: i === qForm.value.correctIndex, sort_order: i }))
+      .filter(o => o.text)
+  }
+  if (!payload.options.some(o => o.is_correct)) { alert('Выберите верный ответ'); return }
+  await api.post(`/admin/tests/${test.value.id}/questions`, payload)
   const { data } = await api.get(`/admin/courses/${courseId}/test`)
   test.value = data
   questionModal.value = false
-  qForm.value = { text: '', options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: true }] }
+  qForm.value = { text: '', correctIndex: 3, options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }] }
+}
+
+async function deleteQuestion(questionId) {
+  if (!confirm('Удалить вопрос?')) return
+  await api.delete(`/admin/tests/questions/${questionId}`)
+  const { data } = await api.get(`/admin/courses/${courseId}/test`)
+  test.value = data
 }
 </script>

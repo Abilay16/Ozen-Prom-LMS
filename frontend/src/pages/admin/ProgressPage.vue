@@ -46,6 +46,7 @@
             <th class="text-left px-4 py-3">Дисциплина / Курс</th>
             <th class="text-left px-4 py-3">Статус</th>
             <th class="text-left px-4 py-3">Результат</th>
+            <th class="text-left px-4 py-3">Действия</th>
           </tr>
         </thead>
         <tbody>
@@ -69,12 +70,20 @@
               </span>
               <span v-else class="text-gray-300">—</span>
             </td>
+            <td class="px-4 py-3">
+              <button
+                v-if="row.status === 'failed'"
+                @click="allowRetake(row.id)"
+                class="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded font-medium"
+              >↺ Пересдача</button>
+              <span v-else class="text-gray-300 text-xs">—</span>
+            </td>
           </tr>
           <tr v-if="!rows.length && !loading">
-            <td colspan="6" class="px-4 py-8 text-center text-gray-400">Нет данных</td>
+            <td colspan="7" class="px-4 py-8 text-center text-gray-400">Нет данных</td>
           </tr>
           <tr v-if="loading">
-            <td colspan="6" class="px-4 py-8 text-center text-gray-400">Загрузка...</td>
+            <td colspan="7" class="px-4 py-8 text-center text-gray-400">Загрузка...</td>
           </tr>
         </tbody>
       </table>
@@ -128,6 +137,16 @@ function statusBadge(s) {
     passed: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-600',
   }[s] || 'bg-gray-100 text-gray-600'
+}
+
+async function allowRetake(assignmentId) {
+  if (!confirm('Разрешить пересдачу? Все предыдущие попытки будут сброшены.')) return
+  try {
+    await api.post(`/admin/progress/${assignmentId}/allow-retake`)
+    await load()
+  } catch (e) {
+    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+  }
 }
 </script>
 
