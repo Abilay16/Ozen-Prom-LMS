@@ -541,15 +541,13 @@ async function signProtocol() {
     // 2. Sign with NCALayer (opens certificate selection dialog)
     cms = await signWithNcaLayer(payloadStr)
   } catch (ncaErr) {
-    // NCALayer not available or user canceled — ask user if they want to sign without EDS
-    const fallback = confirm(
-      `ЭЦП недоступна: ${ncaErr.message}\n\nПодписать без электронной подписи (без штампа ЭЦП)?`
-    )
-    if (!fallback) return
+    // EDS is mandatory — signing without NCALayer is not allowed
+    alert(`Ошибка ЭЦП: ${ncaErr.message}\n\nПодписание без ЭЦП невозможно. Убедитесь, что NCALayer запущен, и попробуйте снова.`)
+    return
   }
 
   try {
-    const body = cms ? { cms } : {}
+    const body = { cms }
     const res = await api.post(`/admin/protocols/${route.params.id}/sign`, body)
     protocol.value = res.data
     flash(isChair ? 'Протокол подписан!' : 'Ваша подпись зафиксирована')
