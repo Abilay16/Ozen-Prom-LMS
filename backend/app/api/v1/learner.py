@@ -20,11 +20,23 @@ router = APIRouter()
 
 
 @router.get("/me")
-async def get_me(learner: CurrentLearner):
+async def get_me(learner: CurrentLearner, db: DB):
+    # Load org and position for the print card
+    from sqlalchemy import select as _select
+    from app.models.user import User
+    user_q = await db.execute(
+        _select(User)
+        .options(selectinload(User.organization), selectinload(User.position))
+        .where(User.id == learner.id)
+    )
+    user = user_q.scalar_one_or_none() or learner
     return {
         "id": str(learner.id),
         "login": learner.login,
         "full_name": learner.full_name,
+        "verify_token": str(learner.verify_token) if learner.verify_token else None,
+        "organization_name": user.organization.name if user.organization else None,
+        "position": user.position_raw or (user.position.name if user.position else None),
     }
 
 

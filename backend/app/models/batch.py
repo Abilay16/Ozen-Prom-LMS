@@ -40,5 +40,5 @@ class TrainingBatch(Base):
 
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization", back_populates="batches")  # noqa
-    import_rows: Mapped[list["ImportRow"]] = relationship("ImportRow", back_populates="batch")  # noqa
-    assignments: Mapped[list["UserCourseAssignment"]] = relationship("UserCourseAssignment", back_populates="batch")  # noqa
+    import_rows: Mapped[list["ImportRow"]] = relationship("ImportRow", back_populates="batch", passive_deletes=True)  # noqa
+    assignments: Mapped[list["UserCourseAssignment"]] = relationship("UserCourseAssignment", back_populates="batch", passive_deletes=True)  # noqa

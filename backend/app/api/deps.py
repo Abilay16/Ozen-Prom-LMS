@@ -46,6 +46,16 @@ async def get_current_learner(
     return user
 
 
+async def get_current_superadmin(
+    admin: Annotated[AdminUser, Depends(get_current_admin)],
+) -> AdminUser:
+    """Requires a non-commission admin (superadmin or regular admin)."""
+    if admin.is_commission_eligible and not admin.is_superadmin:
+        raise ForbiddenError("Недостаточно прав. Только для администраторов.")
+    return admin
+
+
 CurrentAdmin = Annotated[AdminUser, Depends(get_current_admin)]
+CurrentSuperAdmin = Annotated[AdminUser, Depends(get_current_superadmin)]
 CurrentLearner = Annotated[User, Depends(get_current_learner)]
 DB = Annotated[AsyncSession, Depends(get_db)]

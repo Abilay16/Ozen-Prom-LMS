@@ -5,7 +5,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
 from app.models.course import Course
 from app.core.exceptions import NotFoundError
 

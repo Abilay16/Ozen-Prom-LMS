@@ -25,6 +25,9 @@ api.interceptors.response.use(
         const refreshToken = localStorage.getItem('refresh_token')
         const { data } = await axios.post('/api/v1/auth/refresh', { refresh_token: refreshToken })
         localStorage.setItem('access_token', data.access_token)
+        if (data.is_commission !== undefined) {
+          localStorage.setItem('is_commission', data.is_commission ? '1' : '0')
+        }
         original.headers.Authorization = `Bearer ${data.access_token}`
         return api(original)
       } catch {
