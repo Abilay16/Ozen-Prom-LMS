@@ -430,7 +430,7 @@ async def request_signatures(protocol_id: UUID, db: DB, admin: CurrentSuperAdmin
 
 
 class SignRequest(BaseModel):
-    cms: Optional[str] = None  # Base64 CMS from NCALayer; omit for legacy (no EDS)
+    cms: str  # Base64 CMS from NCALayer — required, signing without EDS is not allowed
 
 
 @router.get("/{protocol_id}/signature-payload")
@@ -456,7 +456,7 @@ async def get_signature_payload(protocol_id: UUID, db: DB, admin: CurrentAdmin):
 
 @router.post("/{protocol_id}/sign")
 async def sign_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin,
-                        body: Optional[SignRequest] = None):
+                        body: SignRequest):
     """
     Current admin signs their commission slot.
     - Members (role=member) can sign at any time while awaiting_signatures.
@@ -491,8 +491,8 @@ async def sign_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin,
 
     my_slot.signed_at = datetime.now(timezone.utc)
 
-    # Parse CMS and store certificate info if provided
-    if body and body.cms:
+    # Parse CMS and store certificate info (always required)
+    if body.cms:
         try:
             cert_info = parse_cms(body.cms)
         except CMSParseError as e:
