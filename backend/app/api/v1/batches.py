@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File
 from sqlalchemy import select
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
 from app.models.batch import TrainingBatch, BatchStatus
 from app.models.discipline import Discipline
 from app.core.exceptions import NotFoundError
@@ -19,7 +19,7 @@ class BatchCreate(BaseModel):
 
 
 @router.get("")
-async def list_batches(db: DB, admin: CurrentAdmin):
+async def list_batches(db: DB, admin: CurrentAdmin):  # all admins can read
     result = await db.execute(
         select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
     )
@@ -58,7 +58,7 @@ async def list_batches(db: DB, admin: CurrentAdmin):
 
 
 @router.post("", status_code=201)
-async def create_batch(body: BatchCreate, db: DB, admin: CurrentAdmin):
+async def create_batch(body: BatchCreate, db: DB, admin: CurrentSuperAdmin):
     batch = TrainingBatch(
         name=body.name,
         notes=body.notes,
@@ -71,7 +71,7 @@ async def create_batch(body: BatchCreate, db: DB, admin: CurrentAdmin):
 
 
 @router.get("/{batch_id}")
-async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):
+async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):  # all admins can read
     from app.models.import_row import ImportRow
     from sqlalchemy.orm import selectinload
     result = await db.execute(
@@ -114,7 +114,7 @@ async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):
 
 
 @router.delete("/{batch_id}", status_code=204)
-async def delete_batch(batch_id: UUID, db: DB, admin: CurrentAdmin, deactivate_users: bool = False):
+async def delete_batch(batch_id: UUID, db: DB, admin: CurrentSuperAdmin, deactivate_users: bool = False):
     """Delete a batch. If deactivate_users=true, also deactivate all users in this batch."""
     from app.models.user import User
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
@@ -129,7 +129,7 @@ async def delete_batch(batch_id: UUID, db: DB, admin: CurrentAdmin, deactivate_u
 
 
 @router.post("/{batch_id}/upload-excel")
-async def upload_excel(batch_id: UUID, file: UploadFile = File(...), db: DB = None, admin: CurrentAdmin = None):
+async def upload_excel(batch_id: UUID, db: DB, admin: CurrentSuperAdmin, file: UploadFile = File(...)):
     import os, aiofiles
     from app.core.config import settings
 
@@ -152,7 +152,7 @@ async def upload_excel(batch_id: UUID, file: UploadFile = File(...), db: DB = No
 
 
 @router.post("/{batch_id}/preview-import")
-async def preview_import(batch_id: UUID, db: DB, admin: CurrentAdmin):
+async def preview_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     from app.services.imports.parser import ImportParserService
 
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
@@ -168,7 +168,7 @@ async def preview_import(batch_id: UUID, db: DB, admin: CurrentAdmin):
 
 
 @router.post("/{batch_id}/confirm-import")
-async def confirm_import(batch_id: UUID, db: DB, admin: CurrentAdmin):
+async def confirm_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     """Confirm import: create users, assign courses."""
     from app.services.imports.row_processor import ImportRowProcessor
 

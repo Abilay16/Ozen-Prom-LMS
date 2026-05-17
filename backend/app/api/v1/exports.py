@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 import io
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
 
 router = APIRouter()
 

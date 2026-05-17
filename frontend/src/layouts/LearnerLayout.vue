@@ -5,6 +5,8 @@
       <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
         <span class="font-semibold text-brand-dark">Озен-Пром LMS</span>
         <div class="flex items-center gap-4">
+          <router-link to="/my/courses" class="text-sm text-gray-600 hover:text-brand-dark">Мои курсы</router-link>
+          <router-link to="/my/certificates" class="text-sm text-gray-600 hover:text-brand-dark">🏅 Удостоверения</router-link>
           <span class="text-sm text-gray-600">{{ fullName }}</span>
           <button @click="handleLogout" class="text-sm text-red-500 hover:text-red-700">Выйти</button>
         </div>

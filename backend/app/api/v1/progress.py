@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.attempt import TestAttempt, AttemptStatus
 from app.models.user import User

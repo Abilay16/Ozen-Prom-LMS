@@ -67,10 +67,12 @@ async function handleLogin() {
   error.value = ''
   try {
     const data = await auth.login(form.value.login, form.value.password)
+    // Use a full page reload so the browser always loads the latest JS bundles.
+    // SPA navigation (router.push) can serve stale cached modules.
     if (data.role === 'admin') {
-      router.push('/admin/dashboard')
+      window.location.href = data.is_commission ? '/admin/protocols' : '/admin/dashboard'
     } else {
-      router.push('/my/courses')
+      window.location.href = '/my/courses'
     }
   } catch (e) {
     error.value = e.response?.data?.detail || 'Неверный логин или пароль'

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
 from app.models.organization import Organization
 from app.core.exceptions import NotFoundError
 

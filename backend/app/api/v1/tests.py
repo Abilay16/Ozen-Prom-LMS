@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
 from app.models.test import Test, TestQuestion, TestQuestionOption
 from app.core.exceptions import NotFoundError
 

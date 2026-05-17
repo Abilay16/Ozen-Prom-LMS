@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -13,6 +14,10 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     login: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    verify_token: Mapped[uuid.UUID | None] = mapped_column(
+        default=uuid.uuid4, unique=True, index=True, nullable=True,
+        server_default=text("gen_random_uuid()")
+    )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -30,6 +35,7 @@ class User(Base):
     )  # First import batch
 
     plain_password: Mapped[str | None] = mapped_column(String(255))  # stored for admin reference
+    photo_path: Mapped[str | None] = mapped_column(String(512))  # path to uploaded photo
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -54,6 +60,8 @@ class AdminUser(Base):
     email: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_commission_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    position_title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

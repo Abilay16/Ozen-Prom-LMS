@@ -1,29 +1,45 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
-from sqlalchemy import String, ForeignKey, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, ForeignKey, DateTime, Date, Boolean
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 
 class Certificate(Base):
-    """
-    Placeholder for future certificate/удостоверение feature.
-    Not used on MVP — table exists to avoid schema rework later.
-    """
+    """Удостоверение о проверке знаний."""
     __tablename__ = "certificates"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    certificate_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
-    assignment_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("user_course_assignments.id", ondelete="CASCADE"), nullable=False
+    protocol_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("protocols.id", ondelete="SET NULL")
     )
-    certificate_number: Mapped[str | None] = mapped_column(String(100), unique=True)
-    issued_at: Mapped[datetime] = mapped_column(
+    participant_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("protocol_participants.id", ondelete="SET NULL")
+    )
+    training_type_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("training_types.id", ondelete="SET NULL")
+    )
+    # Denormalized fields for PDF rendering
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    organization_name: Mapped[str | None] = mapped_column(String(255))
+    position: Mapped[str | None] = mapped_column(String(255))
+    issued_date: Mapped[date] = mapped_column(Date, nullable=False)
+    valid_until: Mapped[date | None] = mapped_column(Date)
+    is_renewal: Mapped[bool] = mapped_column(Boolean, default=False)
+    pdf_path: Mapped[str | None] = mapped_column(String(512))
+    qr_code_path: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    file_path: Mapped[str | None] = mapped_column(String(512))  # PDF path when generated
+
+    # Relationships
+    training_type: Mapped["TrainingType"] = relationship("TrainingType", lazy="joined")  # noqa
+    participant: Mapped["ProtocolParticipant"] = relationship(  # noqa
+        "ProtocolParticipant", back_populates="certificate"
+    )
