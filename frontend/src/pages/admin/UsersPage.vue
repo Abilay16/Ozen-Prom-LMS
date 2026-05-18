@@ -142,7 +142,7 @@ async function load() {
   loading.value = true
   try {
     const [usersRes, orgsRes] = await Promise.all([
-      api.get('/admin/users', { params: { search: search.value || undefined } }),
+      api.get('/admin/users', { params: { search: search.value || undefined, is_active: true, limit: 500 } }),
       api.get('/admin/organizations'),
     ])
     users.value = usersRes.data
@@ -244,7 +244,7 @@ async function handlePhotoFile(event) {
 }
 
 async function deleteUser(u) {
-  if (!confirm(`Деактивировать пользователя "${u.full_name}"? Он будет скрыт из списков.`)) return
+  if (!confirm(`Удалить пользователя «${u.full_name}»?`)) return
   await api.delete(`/admin/users/${u.id}`)
   await load()
 }
