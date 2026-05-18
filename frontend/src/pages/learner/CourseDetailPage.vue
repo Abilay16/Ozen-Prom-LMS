@@ -92,9 +92,9 @@
 
         <!-- Content area -->
         <div class="flex-1 overflow-hidden bg-gray-100 relative">
-          <!-- PDF via stream URL — works inline on all platforms -->
+          <!-- PDF: shown inline via /view endpoint (real .pdf files only) -->
           <iframe
-            v-if="currentMat.material_type === 'pdf' && viewerSrcs[currentMat.id]"
+            v-if="currentViewerType === 'pdf' && viewerSrcs[currentMat.id]"
             :src="viewerSrcs[currentMat.id]"
             class="w-full h-full border-0"
             style="touch-action: auto;"
@@ -102,14 +102,14 @@
 
           <!-- Image -->
           <div
-            v-else-if="currentMat.material_type === 'image' && viewerSrcs[currentMat.id]"
+            v-else-if="currentViewerType === 'image' && viewerSrcs[currentMat.id]"
             class="w-full h-full flex items-center justify-center overflow-auto p-4 bg-gray-800"
           >
             <img :src="viewerSrcs[currentMat.id]" class="max-w-full max-h-full object-contain rounded" alt="" />
           </div>
 
           <!-- Video file -->
-          <div v-else-if="currentMat.material_type === 'video_file' && viewerSrcs[currentMat.id]" class="w-full h-full flex items-center justify-center bg-black">
+          <div v-else-if="currentViewerType === 'video' && viewerSrcs[currentMat.id]" class="w-full h-full flex items-center justify-center bg-black">
             <video
               :src="viewerSrcs[currentMat.id]"
               controls
@@ -138,13 +138,15 @@
             <span class="text-sm">Загрузка...</span>
           </div>
 
-          <!-- Not previewable (docx, ppt, etc.) -->
-          <div v-else class="flex flex-col items-center justify-center h-full gap-4 text-gray-700">
+          <!-- Not previewable: ppt, pptx, docx, zip, etc. — explain + download -->
+          <div v-else class="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
             <span class="text-6xl">{{ materialIcon(currentMat.material_type) }}</span>
-            <p class="text-sm font-medium">Предпросмотр недоступен</p>
-            <p class="text-xs text-gray-500">Скачайте файл для просмотра</p>
-            <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              ↓ Скачать
+            <p class="text-base font-semibold text-gray-700">{{ currentMat.title }}</p>
+            <p class="text-sm text-gray-500">
+              Файл <strong>{{ fileExtLabel(currentMat) }}</strong> не поддерживает просмотр в браузере.
+            </p>
+            <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+              ↓ Скачать и открыть
             </button>
           </div>
         </div>
@@ -195,6 +197,34 @@ const viewerLoadingMap = ref({})
 
 const allMaterials = computed(() => assignment.value?.course?.materials ?? [])
 const currentMat = computed(() => allMaterials.value[viewerIndex.value] ?? {})
+
+// Detect actual viewable type from the real file extension on disk,
+// NOT from material_type in DB (admin may have picked wrong type)
+const currentViewerType = computed(() => fileViewerType(currentMat.value))
+
+function fileExt(mat) {
+  if (!mat?.file_path) return ''
+  return mat.file_path.split('.').pop().toLowerCase()
+}
+
+function fileViewerType(mat) {
+  const ext = fileExt(mat)
+  if (ext === 'pdf') return 'pdf'
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'image'
+  if (['mp4', 'webm', 'ogv', 'mov'].includes(ext)) return 'video'
+  return null // ppt, pptx, doc, docx, zip, etc. — not viewable inline
+}
+
+function fileExtLabel(mat) {
+  const ext = fileExt(mat)
+  const labels = {
+    ppt: 'PowerPoint (.ppt)', pptx: 'PowerPoint (.pptx)',
+    doc: 'Word (.doc)', docx: 'Word (.docx)',
+    xls: 'Excel (.xls)', xlsx: 'Excel (.xlsx)',
+    zip: 'ZIP Архив', rar: 'RAR Архив',
+  }
+  return labels[ext] || (ext ? `.${ext}` : 'неизвестный формат')
+}
 
 const completedAttempts = computed(() =>
   assignment.value?.attempts?.filter(a => a.status === 'completed').length ?? 0
@@ -253,20 +283,21 @@ async function prevMaterial() {
 async function loadSrc(mat) {
   if (!mat || !mat.id) return
   if (viewerSrcs.value[mat.id]) return // already cached
-  if (mat.material_type === 'external_link' || mat.material_type === 'video_url') return // no file src needed
-  if (!mat.file_path) return // no file to load
+  if (mat.material_type === 'external_link' || mat.material_type === 'video_url') return
+  if (!mat.file_path) return
+
+  const vtype = fileViewerType(mat)
+  if (!vtype) return // ppt / docx / zip — show download placeholder, no src needed
 
   const token = localStorage.getItem('access_token')
 
-  if (mat.material_type === 'video_file') {
-    // Video: use stream endpoint (X-Accel-Redirect with Range support)
+  if (vtype === 'video') {
+    // Video: use stream (X-Accel-Redirect with Range/seek support)
     viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
-  } else if (['pdf', 'image'].includes(mat.material_type)) {
-    // PDF / image: use /view endpoint — FastAPI serves with Content-Disposition: inline
-    // This ensures the browser displays inline instead of downloading
+  } else {
+    // PDF or image: use /view — FastAPI FileResponse with Content-Disposition: inline
     viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/view?token=${token}` }
   }
-  // docx / ppt / other types: no src, will show download placeholder
 }
 
 async function startTest() {
