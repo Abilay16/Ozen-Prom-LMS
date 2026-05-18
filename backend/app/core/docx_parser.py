@@ -69,35 +69,44 @@ def parse_docx(file_bytes: bytes) -> list[ParsedQuestion]:
         if not raw:
             continue
 
-        q_match = _Q_RE.match(raw)
-        opt_match = _OPT_RE.match(raw)
+        # Параграф может содержать несколько вариантов через Shift+Enter (\n)
+        # Разбиваем на строки и обрабатываем каждую отдельно
+        lines = [line.strip() for line in raw.split('\n') if line.strip()]
 
-        if q_match:
-            if current_q is not None:
-                questions.append(current_q)
-            current_q = ParsedQuestion(text=q_match.group(1).strip())
+        for line in lines:
+            # Пропускаем строки "Дұрыс жауап:" / "Правильный ответ:" и т.п.
+            if re.match(r'^(Дұрыс жауап|Правильный ответ|Correct answer)\s*:', line, re.IGNORECASE):
+                continue
 
-        elif opt_match and current_q is not None:
-            star1 = opt_match.group('star1')  # * before letter
-            star2 = opt_match.group('star2')  # * after bracket
-            text_part = opt_match.group('text').strip()
+            q_match = _Q_RE.match(line)
+            opt_match = _OPT_RE.match(line)
 
-            # * at start of answer text: "А) *текст"
-            star3 = text_part.startswith('*')
-            if star3:
-                text_part = text_part[1:].strip()
+            if q_match:
+                if current_q is not None:
+                    questions.append(current_q)
+                current_q = ParsedQuestion(text=q_match.group(1).strip())
 
-            # * at end of answer text: "А) текст*"
-            star4 = text_part.endswith('*')
-            if star4:
-                text_part = text_part[:-1].strip()
+            elif opt_match and current_q is not None:
+                star1 = opt_match.group('star1')  # * before letter
+                star2 = opt_match.group('star2')  # * after bracket
+                text_part = opt_match.group('text').strip()
 
-            is_correct = bool(star1 or star2 or star3 or star4 or _para_is_bold(para))
+                # * at start of answer text: "А) *текст"
+                star3 = text_part.startswith('*')
+                if star3:
+                    text_part = text_part[1:].strip()
 
-            current_q.options.append(ParsedOption(
-                text=text_part,
-                is_correct=is_correct,
-            ))
+                # * at end of answer text: "А) текст*"
+                star4 = text_part.endswith('*')
+                if star4:
+                    text_part = text_part[:-1].strip()
+
+                is_correct = bool(star1 or star2 or star3 or star4 or _para_is_bold(para))
+
+                current_q.options.append(ParsedOption(
+                    text=text_part,
+                    is_correct=is_correct,
+                ))
 
     if current_q is not None:
         questions.append(current_q)
