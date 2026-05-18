@@ -183,6 +183,31 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
     }
 
 
+@router.get("/materials/{material_id}/view")
+async def view_material(material_id: UUID, token: str, db: DB):
+    """Inline view — serves file with Content-Disposition: inline so browsers display it instead of downloading."""
+    import os
+    from app.core.security import decode_token
+    from app.core.exceptions import UnauthorizedError
+
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access" or payload.get("role") != "learner":
+        raise UnauthorizedError()
+
+    result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
+    material = result.scalar_one_or_none()
+    if not material or not material.file_path:
+        raise NotFoundError("Material not found")
+    if not os.path.exists(material.file_path):
+        raise NotFoundError("File not found on disk")
+
+    return FileResponse(
+        material.file_path,
+        filename=os.path.basename(material.file_path),
+        content_disposition_type="inline",
+    )
+
+
 @router.get("/materials/{material_id}/download")
 async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
     """Secure download — only for authenticated learners."""

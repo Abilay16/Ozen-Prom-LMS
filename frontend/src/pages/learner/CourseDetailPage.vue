@@ -258,12 +258,15 @@ async function loadSrc(mat) {
 
   const token = localStorage.getItem('access_token')
 
-  if (['pdf', 'video_file', 'image'].includes(mat.material_type)) {
-    // Use nginx X-Accel-Redirect stream: proper Content-Type + inline disposition
-    // Works on Desktop Chrome, Firefox, Android Chrome, and iOS Safari
+  if (mat.material_type === 'video_file') {
+    // Video: use stream endpoint (X-Accel-Redirect with Range support)
     viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
+  } else if (['pdf', 'image'].includes(mat.material_type)) {
+    // PDF / image: use /view endpoint — FastAPI serves with Content-Disposition: inline
+    // This ensures the browser displays inline instead of downloading
+    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/view?token=${token}` }
   }
-  // docx / other types: no src, will show download placeholder
+  // docx / ppt / other types: no src, will show download placeholder
 }
 
 async function startTest() {
