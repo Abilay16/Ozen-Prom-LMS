@@ -138,11 +138,40 @@
             </div>
           </div>
 
+          <!-- Edit question modal -->
+          <div v-if="editModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div class="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <h2 class="font-semibold mb-4">Редактировать вопрос</h2>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-sm font-medium text-gray-700">Текст вопроса</label>
+                  <textarea v-model="editForm.text" rows="2" class="input-field mt-1"></textarea>
+                </div>
+                <div v-for="(opt, i) in editForm.options" :key="i" class="flex gap-2 items-center">
+                  <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
+                  <label class="flex items-center gap-1 text-xs whitespace-nowrap">
+                    <input type="radio" name="editCorrect" :value="i" v-model="editForm.correctIndex" />
+                    Верный
+                  </label>
+                  <button v-if="editForm.options.length > 2" @click="editForm.options.splice(i,1); if(editForm.correctIndex>=editForm.options.length) editForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
+                </div>
+                <button @click="editForm.options.push({ text: '' })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
+              </div>
+              <div class="flex gap-3 mt-4">
+                <button @click="saveEdit" class="btn-primary">Сохранить</button>
+                <button @click="editModal = false" class="btn-secondary">Отмена</button>
+              </div>
+            </div>
+          </div>
+
           <ul class="space-y-2">
             <li v-for="(q, i) in test.questions" :key="q.id" class="text-sm p-3 bg-gray-50 rounded border border-gray-100">
               <div class="flex justify-between items-start gap-2">
                 <span class="font-medium">{{ i+1 }}. {{ q.text }}</span>
-                <button @click="deleteQuestion(q.id)" class="text-xs text-red-400 hover:text-red-600 shrink-0">✕</button>
+                <div class="flex gap-2 shrink-0">
+                  <button @click="openEdit(q)" class="text-xs text-blue-400 hover:text-blue-600" title="Редактировать">✏️</button>
+                  <button @click="deleteQuestion(q.id)" class="text-xs text-red-400 hover:text-red-600" title="Удалить">✕</button>
+                </div>
               </div>
               <ul class="mt-1 space-y-0.5 pl-3">
                 <li v-for="opt in q.options" :key="opt.id" class="text-xs flex items-center gap-1">
@@ -184,6 +213,40 @@ const MAT_ICONS = {
 }
 function matIcon(t) { return MAT_ICONS[t] || '📎' }
 const qForm = ref({ text: '', correctIndex: 3, options: [{ text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }, { text: '', is_correct: false }] })
+
+const editModal = ref(false)
+const editingQuestion = ref(null)
+const editForm = ref({ text: '', correctIndex: 0, options: [] })
+
+function openEdit(q) {
+  editingQuestion.value = q
+  editForm.value = {
+    text: q.text,
+    correctIndex: q.options.findIndex(o => o.is_correct),
+    options: q.options.map(o => ({ text: o.text })),
+  }
+  editModal.value = true
+}
+
+async function saveEdit() {
+  if (!editForm.value.text.trim()) { alert('Введите текст вопроса'); return }
+  const opts = editForm.value.options.filter(o => o.text.trim())
+  if (opts.length < 2) { alert('Нужно минимум 2 варианта ответа'); return }
+  const ci = editForm.value.correctIndex
+  if (ci < 0 || ci >= editForm.value.options.length || !editForm.value.options[ci]?.text.trim()) {
+    alert('Выберите верный ответ'); return
+  }
+  const payload = {
+    text: editForm.value.text.trim(),
+    options: editForm.value.options
+      .map((o, i) => ({ text: o.text.trim(), is_correct: i === ci, sort_order: i }))
+      .filter(o => o.text),
+  }
+  await api.put(`/admin/tests/questions/${editingQuestion.value.id}`, payload)
+  const { data } = await api.get(`/admin/courses/${courseId}/test`)
+  test.value = data
+  editModal.value = false
+}
 
 onMounted(async () => {
   const [c, m, t] = await Promise.allSettled([

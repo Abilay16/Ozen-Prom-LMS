@@ -182,3 +182,116 @@ async def confirm_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     if "error" not in summary:
         batch.status = BatchStatus.completed
     return summary
+
+
+class ManualUserAdd(BaseModel):
+    full_name: str
+    position: str = ""
+    organization: str = ""
+
+
+@router.post("/{batch_id}/add-user", status_code=201)
+async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: CurrentSuperAdmin):
+    """Manually add a single user to a batch and assign courses."""
+    from fastapi import HTTPException
+    from app.services.users.factory import UserFactoryService
+    from app.services.positions.normalizer import normalize_position, positions_match
+    from app.models.organization import Organization
+    from app.models.user import User
+    from app.models.assignment import UserCourseAssignment, AssignmentStatus
+    from app.models.course import Course
+
+    result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
+    batch = result.scalar_one_or_none()
+    if not batch:
+        raise NotFoundError("Batch not found")
+
+    full_name = body.full_name.strip()
+    position_raw = body.position.strip()
+    org_name = body.organization.strip()
+
+    if not full_name:
+        raise HTTPException(status_code=422, detail="ФИО не может быть пустым")
+
+    # Get or create organization
+    org = None
+    if org_name:
+        res = await db.execute(select(Organization))
+        for o in res.scalars().all():
+            if o.name.strip().lower() == org_name.lower():
+                org = o
+                break
+        if not org:
+            org = Organization(name=org_name, is_active=True)
+            db.add(org)
+            await db.flush()
+    org_id = org.id if org else None
+
+    norm_name = UserFactoryService.normalize_full_name(full_name)
+    norm_position = normalize_position(position_raw)
+
+    # Duplicate check
+    dup_q = select(User).where(User.normalized_full_name == norm_name)
+    if org_id:
+        dup_q = dup_q.where(User.organization_id == org_id)
+    existing = (await db.execute(dup_q)).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Пользователь «{full_name}» уже существует в этой организации")
+
+    # Create user
+    user_factory = UserFactoryService(db)
+    user, plain_password = await user_factory.create_user(
+        full_name=full_name,
+        organization_id=org_id,
+        position_raw=position_raw,
+        batch_id=batch.id,
+    )
+
+    # Assign courses for each discipline in the batch
+    batch_disciplines: list[Discipline] = []
+    for did in (batch.discipline_ids or []):
+        r = await db.execute(select(Discipline).where(Discipline.id == did))
+        d = r.scalar_one_or_none()
+        if d:
+            batch_disciplines.append(d)
+
+    assigned_courses = []
+    for disc in batch_disciplines:
+        res2 = await db.execute(
+            select(Course)
+            .where(Course.discipline_id == disc.id, Course.is_active == True)
+            .order_by(Course.name)
+        )
+        courses = res2.scalars().all()
+        course = None
+        generic = None
+        for c in courses:
+            tp = (c.target_positions or "").strip()
+            if not tp:
+                generic = c
+                continue
+            for kw in [k.strip() for k in tp.replace(";", ",").split(",") if k.strip()]:
+                if positions_match(kw, norm_position):
+                    course = c
+                    break
+            if course:
+                break
+        if not course:
+            course = generic
+        if course:
+            db.add(UserCourseAssignment(
+                user_id=user.id, course_id=course.id,
+                discipline_id=disc.id, batch_id=batch.id,
+                status=AssignmentStatus.assigned,
+            ))
+            assigned_courses.append(f"{disc.name}: {course.name}")
+
+    await db.flush()
+    return {
+        "full_name": full_name,
+        "login": user.login,
+        "password": plain_password,
+        "organization": org_name,
+        "position": position_raw,
+        "courses": ", ".join(assigned_courses) or "—",
+    }

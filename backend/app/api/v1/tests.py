@@ -84,6 +84,35 @@ async def update_question(question_id: UUID, data: dict, db: DB, admin: CurrentA
     return q
 
 
+@router.put("/questions/{question_id}")
+async def replace_question(question_id: UUID, body: QuestionIn, db: DB, admin: CurrentAdmin):
+    """Replace question text and all its options (used by edit modal)."""
+    from sqlalchemy import delete as sql_delete
+
+    result = await db.execute(select(TestQuestion).where(TestQuestion.id == question_id))
+    q = result.scalar_one_or_none()
+    if not q:
+        raise NotFoundError("Question not found")
+
+    q.text = body.text
+    q.sort_order = body.sort_order
+
+    # Drop existing options and recreate
+    await db.execute(sql_delete(TestQuestionOption).where(TestQuestionOption.question_id == question_id))
+
+    for opt in body.options:
+        db.add(TestQuestionOption(question_id=question_id, **opt.model_dump()))
+
+    await db.flush()
+
+    res2 = await db.execute(
+        select(TestQuestion)
+        .where(TestQuestion.id == question_id)
+        .options(selectinload(TestQuestion.options))
+    )
+    return res2.scalar_one()
+
+
 @router.delete("/questions/{question_id}", status_code=204)
 async def delete_question(question_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(TestQuestion).where(TestQuestion.id == question_id))

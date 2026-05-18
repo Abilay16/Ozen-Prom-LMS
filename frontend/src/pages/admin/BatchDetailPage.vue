@@ -49,18 +49,66 @@
       </div>
     </div>
 
-    <!-- Step 1: Upload Excel -->
+    <!-- Step 1: Upload Excel or add manually -->
     <div class="card mb-4">
-      <h2 class="font-semibold mb-3">1. Загрузить Excel-файл сотрудников</h2>
+      <h2 class="font-semibold mb-3">1. Добавить сотрудников</h2>
       <div class="flex items-center gap-3 flex-wrap">
         <input ref="fileInput" type="file" accept=".xlsx,.xls" class="hidden" @change="onFileSelect" />
-        <button @click="fileInput.click()" class="btn-secondary">Выбрать файл</button>
+        <button @click="fileInput.click()" class="btn-secondary">Выбрать Excel</button>
         <span class="text-sm text-gray-500">{{ selectedFile?.name || 'Файл не выбран' }}</span>
         <button v-if="selectedFile" @click="uploadFile" :disabled="uploading" class="btn-primary">
           {{ uploading ? 'Загрузка...' : 'Загрузить и проверить' }}
         </button>
+        <span class="text-gray-300">|</span>
+        <button @click="manualModal = true" class="btn-secondary">➕ Добавить вручную</button>
       </div>
       <p v-if="uploadError" class="mt-2 text-sm text-red-500">{{ uploadError }}</p>
+    </div>
+
+    <!-- Manual add user modal -->
+    <div v-if="manualModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="card w-full max-w-md">
+        <h2 class="font-semibold mb-4">Добавить сотрудника вручную</h2>
+
+        <div v-if="!manualResult" class="space-y-3">
+          <div>
+            <label class="text-sm font-medium text-gray-700">ФИО <span class="text-red-500">*</span></label>
+            <input v-model="manualForm.full_name" class="input-field mt-1" placeholder="Иванов Иван Иванович" />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Должность</label>
+            <input v-model="manualForm.position" class="input-field mt-1" placeholder="Водитель" />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-gray-700">Организация</label>
+            <input v-model="manualForm.organization" class="input-field mt-1" placeholder="ООО Пример" />
+          </div>
+          <div class="flex gap-3 pt-2">
+            <button @click="addUserManually" :disabled="manualAdding" class="btn-primary disabled:opacity-50">
+              {{ manualAdding ? 'Создаём...' : 'Добавить' }}
+            </button>
+            <button @click="manualModal = false; manualResult = null" class="btn-secondary">Отмена</button>
+          </div>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div class="p-3 bg-green-50 border border-green-200 rounded text-sm">
+            <div class="font-semibold text-green-700 mb-2">✅ Пользователь создан</div>
+            <div><span class="text-gray-500">ФИО:</span> {{ manualResult.full_name }}</div>
+            <div v-if="manualResult.organization"><span class="text-gray-500">Орг:</span> {{ manualResult.organization }}</div>
+            <div v-if="manualResult.position"><span class="text-gray-500">Должность:</span> {{ manualResult.position }}</div>
+            <div class="mt-2 flex gap-4">
+              <div><span class="text-gray-500">Логин:</span> <span class="font-mono font-bold text-blue-700">{{ manualResult.login }}</span></div>
+              <div><span class="text-gray-500">Пароль:</span> <span class="font-mono font-bold text-green-700">{{ manualResult.password }}</span></div>
+            </div>
+            <div v-if="manualResult.courses" class="mt-1 text-xs text-gray-500">Курсы: {{ manualResult.courses }}</div>
+          </div>
+          <div class="flex gap-3">
+            <button @click="manualForm = { full_name: '', position: '', organization: '' }; manualResult = null" class="btn-secondary">Добавить ещё одного</button>
+            <button @click="manualModal = false; manualResult = null" class="btn-primary">Готово</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Step 2: Preview -->
@@ -190,6 +238,34 @@ const preview = ref(null)
 const activeTab = ref('ok')
 const confirming = ref(false)
 const result = ref(null)
+
+const manualModal = ref(false)
+const manualAdding = ref(false)
+const manualResult = ref(null)
+const manualForm = ref({ full_name: '', position: '', organization: '' })
+
+async function addUserManually() {
+  if (!manualForm.value.full_name.trim()) { alert('Введите ФИО'); return }
+  manualAdding.value = true
+  try {
+    const { data } = await api.post(`/admin/batches/${batchId}/add-user`, manualForm.value)
+    manualResult.value = data
+    // refresh stats if batch is completed
+    try {
+      const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
+      batchStats.value = {
+        total: progress.length,
+        passed: progress.filter(r => r.status === 'passed').length,
+        in_progress: progress.filter(r => r.status === 'in_progress').length,
+        assigned: progress.filter(r => r.status === 'assigned').length,
+      }
+    } catch {}
+  } catch (err) {
+    alert('Ошибка: ' + (err.response?.data?.detail || err.message))
+  } finally {
+    manualAdding.value = false
+  }
+}
 
 onMounted(async () => {
   const { data } = await api.get(`/admin/batches/${batchId}`)
