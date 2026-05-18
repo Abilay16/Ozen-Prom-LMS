@@ -185,8 +185,11 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
 
 @router.get("/materials/{material_id}/view")
 async def view_material(material_id: UUID, token: str, db: DB):
-    """Inline view — serves file with Content-Disposition: inline so browsers display it instead of downloading."""
+    """Inline view — serves file with Content-Disposition: inline so browsers display it.
+    For PPT/PPTX/DOC/DOCX, looks for a converted PDF sidecar ({uuid}.pdf) next to the original.
+    Returns 422 if file cannot be displayed inline (no PDF sidecar yet or unsupported format)."""
     import os
+    from fastapi import HTTPException
     from app.core.security import decode_token
     from app.core.exceptions import UnauthorizedError
 
@@ -201,9 +204,26 @@ async def view_material(material_id: UUID, token: str, db: DB):
     if not os.path.exists(material.file_path):
         raise NotFoundError("File not found on disk")
 
+    ext = os.path.splitext(material.file_path)[1].lower()
+    serve_path = material.file_path
+
+    # For office files, check for converted PDF sidecar
+    if ext in {'.ppt', '.pptx', '.doc', '.docx'}:
+        pdf_sidecar = os.path.splitext(material.file_path)[0] + '.pdf'
+        if os.path.exists(pdf_sidecar):
+            serve_path = pdf_sidecar
+        else:
+            raise HTTPException(status_code=422, detail="not_viewable")
+
+    # Verify resulting file is browser-viewable inline
+    serve_ext = os.path.splitext(serve_path)[1].lower()
+    if serve_ext not in {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+                         '.mp4', '.webm', '.ogv', '.mov'}:
+        raise HTTPException(status_code=422, detail="not_viewable")
+
     return FileResponse(
-        material.file_path,
-        filename=os.path.basename(material.file_path),
+        serve_path,
+        filename=os.path.basename(serve_path),
         content_disposition_type="inline",
     )
 

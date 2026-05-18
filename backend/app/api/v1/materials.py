@@ -1,7 +1,7 @@
 from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy import select
 
 from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
@@ -10,12 +10,35 @@ from app.core.exceptions import NotFoundError
 
 router = APIRouter()
 
+_OFFICE_EXTENSIONS = {'.ppt', '.pptx', '.doc', '.docx'}
+
+
+def _convert_to_pdf(file_path: str) -> None:
+    """Convert office file to PDF using LibreOffice headless. Runs as a background task after upload."""
+    import os, subprocess
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext not in _OFFICE_EXTENSIONS:
+        return
+    out_dir = os.path.dirname(file_path)
+    try:
+        subprocess.run(
+            ['libreoffice', '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', out_dir, file_path],
+            timeout=120,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            # Use /tmp as HOME so LibreOffice can write its profile in a writable location
+            env={**os.environ, 'HOME': '/tmp'},
+        )
+    except Exception:
+        pass  # Conversion failed silently — file still uploaded, just no inline preview
+
 
 @router.post("/courses/{course_id}", status_code=201)
 async def add_material(
     course_id: UUID,
     db: DB,
     admin: CurrentAdmin,
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
     material_type: MaterialType = Form(...),
     url: Optional[str] = Form(None),
@@ -40,6 +63,10 @@ async def add_material(
         file_size = len(content)
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(content)
+
+        # Queue PDF conversion for office files (runs after response is sent)
+        if ext in _OFFICE_EXTENSIONS:
+            background_tasks.add_task(_convert_to_pdf, file_path)
 
     material = CourseMaterial(
         course_id=course_id,

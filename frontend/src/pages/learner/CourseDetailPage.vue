@@ -138,16 +138,32 @@
             <span class="text-sm">Загрузка...</span>
           </div>
 
-          <!-- Not previewable: ppt, pptx, docx, zip, etc. — explain + download -->
+          <!-- Not previewable: ppt/pptx/docx — PDF sidecar not ready yet or unsupported -->
           <div v-else class="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
             <span class="text-6xl">{{ materialIcon(currentMat.material_type) }}</span>
             <p class="text-base font-semibold text-gray-700">{{ currentMat.title }}</p>
-            <p class="text-sm text-gray-500">
-              Файл <strong>{{ fileExtLabel(currentMat) }}</strong> не поддерживает просмотр в браузере.
-            </p>
-            <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              ↓ Скачать и открыть
-            </button>
+            <template v-if="isOfficefile(currentMat)">
+              <p class="text-sm text-gray-500">
+                Файл <strong>{{ fileExtLabel(currentMat) }}</strong> — PDF-версия ещё создаётся на сервере.
+              </p>
+              <p class="text-xs text-gray-400">Попробуйте открыть через несколько секунд или скачайте файл.</p>
+              <div class="flex gap-3 mt-2">
+                <button @click="retryLoad(currentMat)" class="px-5 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-600">
+                  ↺ Обновить
+                </button>
+                <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                  ↓ Скачать
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <p class="text-sm text-gray-500">
+                Формат <strong>{{ fileExtLabel(currentMat) }}</strong> не поддерживает просмотр в браузере.
+              </p>
+              <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                ↓ Скачать и открыть
+              </button>
+            </template>
           </div>
         </div>
 
@@ -198,9 +214,13 @@ const viewerLoadingMap = ref({})
 const allMaterials = computed(() => assignment.value?.course?.materials ?? [])
 const currentMat = computed(() => allMaterials.value[viewerIndex.value] ?? {})
 
-// Detect actual viewable type from the real file extension on disk,
-// NOT from material_type in DB (admin may have picked wrong type)
-const currentViewerType = computed(() => fileViewerType(currentMat.value))
+// Overridden when an office file (ppt/docx) turns out to have a converted PDF preview
+const viewerTypeOverride = ref({})
+
+// Detect actual viewable type — prefers override (set after HEAD check reveals PDF sidecar)
+const currentViewerType = computed(() =>
+  viewerTypeOverride.value[currentMat.value.id] ?? fileViewerType(currentMat.value)
+)
 
 function fileExt(mat) {
   if (!mat?.file_path) return ''
@@ -280,24 +300,59 @@ async function prevMaterial() {
   await loadSrc(allMaterials.value[viewerIndex.value])
 }
 
+const _OFFICE_EXTS = ['ppt', 'pptx', 'doc', 'docx']
+
+function isOfficefile(mat) {
+  return _OFFICE_EXTS.includes(fileExt(mat))
+}
+
 async function loadSrc(mat) {
-  if (!mat || !mat.id) return
-  if (viewerSrcs.value[mat.id]) return // already cached
+  if (!mat?.id) return
+  if (mat.id in viewerSrcs.value) return // already checked (may be null = not previewable)
   if (mat.material_type === 'external_link' || mat.material_type === 'video_url') return
   if (!mat.file_path) return
 
   const vtype = fileViewerType(mat)
-  if (!vtype) return // ppt / docx / zip — show download placeholder, no src needed
-
   const token = localStorage.getItem('access_token')
+  const viewUrl = `/api/v1/learner/materials/${mat.id}/view?token=${token}`
 
   if (vtype === 'video') {
-    // Video: use stream (X-Accel-Redirect with Range/seek support)
     viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
+  } else if (vtype === 'pdf' || vtype === 'image') {
+    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: viewUrl }
+  } else if (_OFFICE_EXTS.includes(fileExt(mat))) {
+    // Office file: check if server has the converted PDF ready via HEAD request
+    viewerLoadingMap.value = { ...viewerLoadingMap.value, [mat.id]: true }
+    try {
+      const resp = await fetch(viewUrl, { method: 'HEAD' })
+      if (resp.ok) {
+        // PDF sidecar is ready — show as PDF
+        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: viewUrl }
+        viewerTypeOverride.value = { ...viewerTypeOverride.value, [mat.id]: 'pdf' }
+      } else {
+        // Still converting or conversion failed — show placeholder
+        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
+      }
+    } catch {
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
+    } finally {
+      viewerLoadingMap.value = { ...viewerLoadingMap.value, [mat.id]: false }
+    }
   } else {
-    // PDF or image: use /view — FastAPI FileResponse with Content-Disposition: inline
-    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/view?token=${token}` }
+    // zip, rar, etc. — not previewable
+    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
   }
+}
+
+async function retryLoad(mat) {
+  // Clear cache and re-check (for when conversion was still in progress)
+  const newSrcs = { ...viewerSrcs.value }
+  const newOverrides = { ...viewerTypeOverride.value }
+  delete newSrcs[mat.id]
+  delete newOverrides[mat.id]
+  viewerSrcs.value = newSrcs
+  viewerTypeOverride.value = newOverrides
+  await loadSrc(mat)
 }
 
 async function startTest() {
