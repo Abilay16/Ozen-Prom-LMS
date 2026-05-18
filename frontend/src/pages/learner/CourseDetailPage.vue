@@ -17,75 +17,37 @@
     <div class="card mb-6">
       <h2 class="font-semibold text-lg mb-4">Материалы курса</h2>
       <div v-if="!assignment.course?.materials?.length" class="text-gray-400 text-sm">Материалы не добавлены</div>
-      <div class="space-y-4">
-        <div v-for="mat in assignment.course?.materials" :key="mat.id">
-          <!-- Video embed for YouTube/Vimeo -->
-          <div v-if="mat.material_type === 'video_url' && mat.url">
-            <div class="font-medium text-sm mb-2">{{ materialIcon(mat.material_type) }} {{ mat.title }}</div>
-            <div v-if="youtubeId(mat.url)" class="aspect-video rounded overflow-hidden bg-black">
-              <iframe
-                :src="`https://www.youtube.com/embed/${youtubeId(mat.url)}`"
-                class="w-full h-full"
-                frameborder="0"
-                allowfullscreen
-              ></iframe>
-            </div>
-            <a v-else :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть видео ↗</a>
+      <div class="space-y-2">
+        <div
+          v-for="(mat, idx) in assignment.course?.materials"
+          :key="mat.id"
+          class="flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          <span class="text-2xl flex-shrink-0">{{ materialIcon(mat.material_type) }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm truncate">{{ mat.title }}</div>
+            <div class="text-xs text-gray-400">{{ matTypeLabel(mat.material_type) }}</div>
           </div>
-          <!-- External link -->
-          <div v-else-if="mat.material_type === 'external_link' && mat.url" class="flex items-center gap-3">
-            <span class="text-xl">{{ materialIcon(mat.material_type) }}</span>
-            <div class="flex-1">
-              <div class="font-medium text-sm">{{ mat.title }}</div>
-            </div>
-            <a :href="mat.url" target="_blank" class="text-sm text-brand-mid hover:underline">Открыть ↗</a>
-          </div>
-          <!-- Downloadable file -->
-          <div v-else class="border border-gray-100 rounded-lg overflow-hidden">
-            <div class="flex items-center gap-3 p-3">
-              <span class="text-2xl">{{ materialIcon(mat.material_type) }}</span>
-              <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm truncate">{{ mat.title }}</div>
-                <div class="text-xs text-gray-400 capitalize">{{ matTypeLabel(mat.material_type) }}</div>
-              </div>
-              <div v-if="mat.file_path" class="flex items-center gap-2 flex-shrink-0">
-                <button
-                  v-if="canPreview(mat.material_type)"
-                  @click="toggleViewer(mat)"
-                  class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
-                  :class="viewerMatId === mat.id
-                    ? 'bg-gray-200 text-gray-700'
-                    : 'bg-blue-50 text-blue-600 hover:bg-blue-100'"
-                  :disabled="viewerLoading[mat.id]"
-                >
-                  {{ viewerLoading[mat.id] ? 'Загрузка...' : viewerMatId === mat.id ? '✕ Закрыть' : '👁 Открыть' }}
-                </button>
-                <button @click="downloadMaterial(mat)" class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 hover:underline">
-                  ↓ Скачать
-                </button>
-              </div>
-            </div>
-            <!-- Inline viewer -->
-            <div v-if="viewerMatId === mat.id && viewerSrcs[mat.id]" class="border-t border-gray-100">
-              <iframe
-                v-if="mat.material_type === 'pdf'"
-                :src="viewerSrcs[mat.id]"
-                class="w-full"
-                style="height: 75vh;"
-                frameborder="0"
-              ></iframe>
-              <div v-else-if="mat.material_type === 'image'" class="p-4 bg-gray-50">
-                <img :src="viewerSrcs[mat.id]" class="max-w-full mx-auto block rounded shadow" alt="" />
-              </div>
-              <video
-                v-else-if="mat.material_type === 'video_file'"
-                :src="viewerSrcs[mat.id]"
-                controls
-                preload="metadata"
-                class="w-full bg-black"
-                style="max-height: 70vh;"
-              ></video>
-            </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- External link -->
+            <a
+              v-if="mat.material_type === 'external_link' && mat.url"
+              :href="mat.url"
+              target="_blank"
+              class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium"
+            >Открыть ↗</a>
+            <!-- Viewable or downloadable file -->
+            <template v-else>
+              <button
+                @click="openViewer(idx)"
+                class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium"
+              >👁 Открыть</button>
+              <button
+                v-if="mat.file_path"
+                @click="downloadMaterial(mat)"
+                class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 hover:underline"
+              >↓ Скачать</button>
+            </template>
           </div>
         </div>
       </div>
@@ -113,11 +75,109 @@
         </button>
       </div>
     </div>
+
+    <!-- ========== FULLSCREEN MATERIAL VIEWER ========== -->
+    <teleport to="body">
+      <div v-if="viewerOpen" class="fixed inset-0 z-50 flex flex-col bg-black">
+        <!-- Header -->
+        <div class="flex items-center gap-3 px-4 py-3 bg-gray-900 text-white flex-shrink-0">
+          <span class="text-xl flex-shrink-0">{{ materialIcon(currentMat.material_type) }}</span>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm truncate">{{ currentMat.title }}</div>
+            <div class="text-xs text-gray-400">{{ matTypeLabel(currentMat.material_type) }}</div>
+          </div>
+          <span class="text-xs text-gray-400 flex-shrink-0">{{ viewerIndex + 1 }} / {{ allMaterials.length }}</span>
+          <button @click="closeViewer" class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <!-- Content area -->
+        <div class="flex-1 overflow-hidden bg-gray-100 relative">
+          <!-- PDF via stream URL — works inline on all platforms -->
+          <iframe
+            v-if="currentMat.material_type === 'pdf' && viewerSrcs[currentMat.id]"
+            :src="viewerSrcs[currentMat.id]"
+            class="w-full h-full border-0"
+            style="touch-action: auto;"
+          ></iframe>
+
+          <!-- Image -->
+          <div
+            v-else-if="currentMat.material_type === 'image' && viewerSrcs[currentMat.id]"
+            class="w-full h-full flex items-center justify-center overflow-auto p-4 bg-gray-800"
+          >
+            <img :src="viewerSrcs[currentMat.id]" class="max-w-full max-h-full object-contain rounded" alt="" />
+          </div>
+
+          <!-- Video file -->
+          <div v-else-if="currentMat.material_type === 'video_file' && viewerSrcs[currentMat.id]" class="w-full h-full flex items-center justify-center bg-black">
+            <video
+              :src="viewerSrcs[currentMat.id]"
+              controls
+              preload="metadata"
+              playsinline
+              class="w-full h-full object-contain"
+            ></video>
+          </div>
+
+          <!-- YouTube embed -->
+          <iframe
+            v-else-if="currentMat.material_type === 'video_url' && youtubeId(currentMat.url)"
+            :src="`https://www.youtube.com/embed/${youtubeId(currentMat.url)}`"
+            class="w-full h-full border-0"
+            allowfullscreen
+          ></iframe>
+
+          <!-- Other video URL -->
+          <div v-else-if="currentMat.material_type === 'video_url' && currentMat.url" class="flex flex-col items-center justify-center h-full gap-4 text-white">
+            <span class="text-5xl">▶️</span>
+            <a :href="currentMat.url" target="_blank" class="text-blue-400 underline text-sm">Открыть видео в новой вкладке ↗</a>
+          </div>
+
+          <!-- Loading spinner -->
+          <div v-else-if="viewerLoadingMap[currentMat.id]" class="flex items-center justify-center h-full text-gray-500">
+            <span class="text-sm">Загрузка...</span>
+          </div>
+
+          <!-- Not previewable (docx, ppt, etc.) -->
+          <div v-else class="flex flex-col items-center justify-center h-full gap-4 text-gray-700">
+            <span class="text-6xl">{{ materialIcon(currentMat.material_type) }}</span>
+            <p class="text-sm font-medium">Предпросмотр недоступен</p>
+            <p class="text-xs text-gray-500">Скачайте файл для просмотра</p>
+            <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+              ↓ Скачать
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer navigation -->
+        <div class="flex items-center justify-between px-4 py-3 bg-gray-900 flex-shrink-0">
+          <button
+            @click="prevMaterial"
+            :disabled="viewerIndex === 0"
+            class="px-5 py-2 rounded-lg text-sm font-medium border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >← Назад</button>
+
+          <button
+            v-if="currentMat.file_path"
+            @click="downloadMaterial(currentMat)"
+            class="text-xs text-gray-400 hover:text-white transition-colors"
+          >↓ Скачать</button>
+          <span v-else></span>
+
+          <button
+            @click="nextMaterial"
+            :disabled="viewerIndex === allMaterials.length - 1"
+            class="px-5 py-2 rounded-lg text-sm font-medium border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >Вперёд →</button>
+        </div>
+      </div>
+    </teleport>
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
 
@@ -126,9 +186,15 @@ const router = useRouter()
 const assignment = ref(null)
 const loading = ref(true)
 const starting = ref(false)
-const viewerMatId = ref(null)
+
+// Viewer state
+const viewerOpen = ref(false)
+const viewerIndex = ref(0)
 const viewerSrcs = ref({})
-const viewerLoading = ref({})
+const viewerLoadingMap = ref({})
+
+const allMaterials = computed(() => assignment.value?.course?.materials ?? [])
+const currentMat = computed(() => allMaterials.value[viewerIndex.value] ?? {})
 
 const completedAttempts = computed(() =>
   assignment.value?.attempts?.filter(a => a.status === 'completed').length ?? 0
@@ -141,7 +207,64 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  window.addEventListener('keydown', onKey)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  document.body.style.overflow = ''
+  // Revoke any blob URLs to avoid memory leaks
+  Object.values(viewerSrcs.value).forEach(src => {
+    if (src && src.startsWith('blob:')) URL.revokeObjectURL(src)
+  })
+})
+
+function onKey(e) {
+  if (!viewerOpen.value) return
+  if (e.key === 'Escape') closeViewer()
+  if (e.key === 'ArrowRight') nextMaterial()
+  if (e.key === 'ArrowLeft') prevMaterial()
+}
+
+async function openViewer(idx) {
+  viewerIndex.value = idx
+  viewerOpen.value = true
+  document.body.style.overflow = 'hidden'
+  await loadSrc(allMaterials.value[idx])
+}
+
+function closeViewer() {
+  viewerOpen.value = false
+  document.body.style.overflow = ''
+}
+
+async function nextMaterial() {
+  if (viewerIndex.value >= allMaterials.value.length - 1) return
+  viewerIndex.value++
+  await loadSrc(allMaterials.value[viewerIndex.value])
+}
+
+async function prevMaterial() {
+  if (viewerIndex.value <= 0) return
+  viewerIndex.value--
+  await loadSrc(allMaterials.value[viewerIndex.value])
+}
+
+async function loadSrc(mat) {
+  if (!mat || !mat.id) return
+  if (viewerSrcs.value[mat.id]) return // already cached
+  if (mat.material_type === 'external_link' || mat.material_type === 'video_url') return // no file src needed
+  if (!mat.file_path) return // no file to load
+
+  const token = localStorage.getItem('access_token')
+
+  if (['pdf', 'video_file', 'image'].includes(mat.material_type)) {
+    // Use nginx X-Accel-Redirect stream: proper Content-Type + inline disposition
+    // Works on Desktop Chrome, Firefox, Android Chrome, and iOS Safari
+    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
+  }
+  // docx / other types: no src, will show download placeholder
+}
 
 async function startTest() {
   starting.value = true
@@ -162,49 +285,18 @@ function materialIcon(type) {
 }
 
 function matTypeLabel(type) {
-  return { pdf: 'PDF документ', image: 'Изображение', video_file: 'Видеофайл', docx: 'Word документ' }[type] || type
-}
-
-function canPreview(type) {
-  return ['pdf', 'image', 'video_file'].includes(type)
-}
-
-async function toggleViewer(mat) {
-  if (viewerMatId.value === mat.id) {
-    viewerMatId.value = null
-    return
-  }
-  if (!viewerSrcs.value[mat.id]) {
-    if (mat.material_type === 'video_file') {
-      // Direct streaming URL — browser handles Range requests itself (no full download)
-      const token = localStorage.getItem('access_token')
-      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
-    } else {
-      viewerLoading.value = { ...viewerLoading.value, [mat.id]: true }
-      try {
-        const { data } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
-        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: URL.createObjectURL(data) }
-      } catch {
-        alert('Не удалось загрузить файл')
-        return
-      } finally {
-        viewerLoading.value = { ...viewerLoading.value, [mat.id]: false }
-      }
-    }
-  }
-  viewerMatId.value = mat.id
+  return { pdf: 'PDF документ', image: 'Изображение', video_file: 'Видеофайл', docx: 'Word документ', video_url: 'Видео', external_link: 'Внешняя ссылка' }[type] || type
 }
 
 function youtubeId(url) {
   if (!url) return null
-  // Handles youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
   const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/)
   return m ? m[1] : null
 }
 
 async function downloadMaterial(mat) {
   try {
-    const { data, headers } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
+    const { data } = await api.get(`/learner/materials/${mat.id}/download`, { responseType: 'blob' })
     const url = URL.createObjectURL(data)
     const a = document.createElement('a')
     a.href = url
@@ -215,6 +307,7 @@ async function downloadMaterial(mat) {
     alert('Не удалось скачать файл')
   }
 }
+
 function statusBadge(s) {
   return { assigned: 'badge-assigned', in_progress: 'badge-progress', passed: 'badge-passed', failed: 'badge-failed' }[s] || 'badge-assigned'
 }
