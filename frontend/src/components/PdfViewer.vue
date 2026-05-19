@@ -1,21 +1,18 @@
 <template>
-  <div
-    ref="container"
-    style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: scroll; overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; background: #f3f4f6;"
-  >
-    <div v-if="loading" class="flex items-center justify-center min-h-full text-gray-500 text-sm">
+  <div ref="container" style="width: 100%;">
+    <div v-if="loading" style="padding: 40px 0; text-align: center; color: #6b7280; font-size: 14px;">
       Загрузка PDF...
     </div>
-    <div v-else-if="error" class="flex flex-col items-center justify-center min-h-full gap-3 px-4 text-center">
-      <span class="text-4xl">⚠️</span>
-      <p class="text-red-400 text-sm">{{ error }}</p>
+    <div v-else-if="error" style="padding: 40px 16px; text-align: center;">
+      <div style="font-size: 40px;">⚠️</div>
+      <p style="color: #f87171; font-size: 14px; margin-top: 8px;">{{ error }}</p>
     </div>
-    <div v-else class="flex flex-col items-center gap-2 py-3">
+    <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px;">
       <canvas
         v-for="n in pageCount"
         :key="n"
         :ref="el => mountCanvas(el, n)"
-        style="display: block; max-width: 100%;"
+        style="display: block;"
       />
     </div>
   </div>
@@ -59,10 +56,11 @@ function mountCanvas(el, n) {
 }
 
 function getContainerWidth() {
-  // On iOS Safari inside a fixed modal, clientWidth/getBoundingClientRect can
-  // return 0 before the first paint. window.innerWidth is always reliable.
-  const rect = container.value?.getBoundingClientRect?.()
-  const w = (rect && rect.width > 10 ? rect.width : null)
+  // The parent content-area is the scrollable container — its width equals
+  // window.innerWidth on mobile (full-screen modal). Use the parent's
+  // clientWidth if available, fall back to window.innerWidth.
+  const parent = container.value?.parentElement
+  const w = (parent?.clientWidth > 10 ? parent.clientWidth : null)
     ?? (container.value?.clientWidth > 10 ? container.value.clientWidth : null)
     ?? window.innerWidth
   return Math.max(w, 200) - 8

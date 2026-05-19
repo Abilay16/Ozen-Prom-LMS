@@ -91,7 +91,14 @@
         </div>
 
         <!-- Content area -->
-        <div class="flex-1 min-h-0 bg-gray-100 relative" style="overflow: hidden;">
+        <!-- iOS Safari requires overflow-y:scroll (not auto) on the actual scrolling element.
+             When showing PDF we make this div the scroll container directly. -->
+        <div
+          class="flex-1 min-h-0 bg-gray-100 relative"
+          :style="currentViewerType === 'pdf'
+            ? 'overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;'
+            : 'overflow: hidden;'"
+        >
           <!-- PDF: rendered by PDF.js (works on Android, iOS, Desktop) -->
           <PdfViewer
             v-if="currentViewerType === 'pdf'"
