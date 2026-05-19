@@ -95,7 +95,7 @@
              When showing PDF we make this div the scroll container directly. -->
         <div
           class="flex-1 min-h-0 bg-gray-100 relative"
-          :style="currentViewerType === 'pdf'
+          :style="currentViewerType === 'pdf' && isAndroid
             ? 'overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;'
             : 'overflow: hidden;'"
         >
@@ -204,6 +204,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
 import PdfViewer from '@/components/PdfViewer.vue'
+
+// Android Chrome needs PDF.js (canvas, scrollable parent).
+// iOS Safari and Desktop use native iframe rendering (scroll inside iframe).
+const isAndroid = /Android/i.test(navigator.userAgent)
 
 const route = useRoute()
 const router = useRouter()
