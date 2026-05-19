@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List
 from pydantic import BaseModel
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -183,13 +183,14 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
     }
 
 
-@router.get("/materials/{material_id}/view")
-async def view_material(material_id: UUID, token: str, db: DB):
-    """Inline view — serves file with Content-Disposition: inline so browsers display it.
-    For PPT/PPTX/DOC/DOCX, looks for a converted PDF sidecar ({uuid}.pdf) next to the original.
-    Returns 422 if file cannot be displayed inline (no PDF sidecar yet or unsupported format)."""
+@router.api_route("/materials/{material_id}/view", methods=["GET", "HEAD"])
+async def view_material(request: Request, material_id: UUID, token: str, db: DB):
+    """Inline view (GET) or existence check (HEAD) for a material.
+    For office files (ppt/pptx/doc/docx) serves the converted PDF sidecar.
+    Returns 422 when PDF sidecar is not ready yet."""
     import os
     from fastapi import HTTPException
+    from fastapi.responses import Response
     from app.core.security import decode_token
     from app.core.exceptions import UnauthorizedError
 
@@ -207,7 +208,7 @@ async def view_material(material_id: UUID, token: str, db: DB):
     ext = os.path.splitext(material.file_path)[1].lower()
     serve_path = material.file_path
 
-    # For office files, check for converted PDF sidecar
+    # For office files look for the converted PDF sidecar
     if ext in {'.ppt', '.pptx', '.doc', '.docx'}:
         pdf_sidecar = os.path.splitext(material.file_path)[0] + '.pdf'
         if os.path.exists(pdf_sidecar):
@@ -220,6 +221,10 @@ async def view_material(material_id: UUID, token: str, db: DB):
     if serve_ext not in {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
                          '.mp4', '.webm', '.ogv', '.mov'}:
         raise HTTPException(status_code=422, detail="not_viewable")
+
+    # HEAD: just confirm availability without sending the body
+    if request.method == "HEAD":
+        return Response(status_code=200)
 
     return FileResponse(
         serve_path,
