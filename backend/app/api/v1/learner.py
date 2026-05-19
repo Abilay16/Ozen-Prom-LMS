@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Request
@@ -184,8 +184,9 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
 
 
 @router.api_route("/materials/{material_id}/view", methods=["GET", "HEAD"])
-async def view_material(request: Request, material_id: UUID, token: str, db: DB):
+async def view_material(request: Request, material_id: UUID, db: DB, token: Optional[str] = None):
     """Inline view (GET) or existence check (HEAD) for a material.
+    Accepts token via Authorization: Bearer header (preferred) or ?token= query param.
     For office files (ppt/pptx/doc/docx) serves the converted PDF sidecar.
     Returns 422 when PDF sidecar is not ready yet."""
     import os
@@ -194,7 +195,13 @@ async def view_material(request: Request, material_id: UUID, token: str, db: DB)
     from app.core.security import decode_token
     from app.core.exceptions import UnauthorizedError
 
-    payload = decode_token(token)
+    # Accept token from Authorization header (preferred) or query param
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    payload = decode_token(token) if token else None
     if not payload or payload.get("type") != "access" or payload.get("role") != "learner":
         raise UnauthorizedError()
 

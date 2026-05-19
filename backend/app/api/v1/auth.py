@@ -34,8 +34,8 @@ class RefreshRequest(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: DB):
     """Login for both admin and learner. Returns role in response."""
-    # Try admin first
-    result = await db.execute(select(AdminUser).where(AdminUser.login == body.login))
+    # Try admin first (case-insensitive login)
+    result = await db.execute(select(AdminUser).where(AdminUser.login == body.login.strip().lower()))
     admin = result.scalar_one_or_none()
     if admin and admin.is_active and verify_password(body.password, admin.password_hash):
         # Save values before commit (expire_on_commit in some sessions would expire them)
@@ -55,8 +55,8 @@ async def login(body: LoginRequest, db: DB):
             is_commission=is_commission,
         )
 
-    # Try learner
-    result = await db.execute(select(User).where(User.login == body.login))
+    # Try learner (case-insensitive login)
+    result = await db.execute(select(User).where(User.login == body.login.strip().lower()))
     user = result.scalar_one_or_none()
     if user and user.is_active and verify_password(body.password, user.password_hash):
         # Save values before commit

@@ -91,14 +91,13 @@
         </div>
 
         <!-- Content area -->
-        <div class="flex-1 overflow-hidden bg-gray-100 relative">
-          <!-- PDF: shown inline via /view endpoint (real .pdf files only) -->
-          <iframe
-            v-if="currentViewerType === 'pdf' && viewerSrcs[currentMat.id]"
-            :src="viewerSrcs[currentMat.id]"
-            class="w-full h-full border-0"
-            style="touch-action: auto;"
-          ></iframe>
+        <div class="flex-1 min-h-0 bg-gray-100 relative overflow-hidden">
+          <!-- PDF: rendered by PDF.js (works on Android, iOS, Desktop) -->
+          <PdfViewer
+            v-if="currentViewerType === 'pdf'"
+            :material-id="String(currentMat.id)"
+            class="w-full h-full"
+          />
 
           <!-- Image -->
           <div
@@ -198,6 +197,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
+import PdfViewer from '@/components/PdfViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -314,26 +314,31 @@ async function loadSrc(mat) {
 
   const vtype = fileViewerType(mat)
   const token = localStorage.getItem('access_token')
-  const viewUrl = `/api/v1/learner/materials/${mat.id}/view?token=${token}`
 
   if (vtype === 'video') {
+    // Video stream still uses token-in-URL (HTML5 video can't send custom headers)
     viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: `/api/v1/learner/materials/${mat.id}/stream?token=${token}` }
-  } else if (vtype === 'pdf' || vtype === 'image') {
-    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: viewUrl }
+  } else if (vtype === 'pdf') {
+    // PdfViewer fetches internally via Authorization header — just mark as ready
+    viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: true }
+  } else if (vtype === 'image') {
+    // Fetch image as blob so token never appears in the URL
+    try {
+      const { data } = await api.get(`/learner/materials/${mat.id}/view`, { responseType: 'blob' })
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: URL.createObjectURL(data) }
+    } catch {
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
+    }
   } else if (_OFFICE_EXTS.includes(fileExt(mat))) {
-    // Office file: check if server has the converted PDF ready via HEAD request
+    // Office file: check if server has the converted PDF sidecar ready
     viewerLoadingMap.value = { ...viewerLoadingMap.value, [mat.id]: true }
     try {
-      const resp = await fetch(viewUrl, { method: 'HEAD' })
-      if (resp.ok) {
-        // PDF sidecar is ready — show as PDF
-        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: viewUrl }
-        viewerTypeOverride.value = { ...viewerTypeOverride.value, [mat.id]: 'pdf' }
-      } else {
-        // Still converting or conversion failed — show placeholder
-        viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
-      }
+      await api.head(`/learner/materials/${mat.id}/view`)
+      // PDF sidecar is ready — show via PdfViewer
+      viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: true }
+      viewerTypeOverride.value = { ...viewerTypeOverride.value, [mat.id]: 'pdf' }
     } catch {
+      // Still converting or conversion failed — show placeholder
       viewerSrcs.value = { ...viewerSrcs.value, [mat.id]: null }
     } finally {
       viewerLoadingMap.value = { ...viewerLoadingMap.value, [mat.id]: false }
