@@ -1,8 +1,7 @@
 <template>
   <div
     ref="container"
-    class="w-full h-full overflow-y-auto overflow-x-hidden bg-gray-100"
-    style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain;"
+    style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: scroll; overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; background: #f3f4f6;"
   >
     <div v-if="loading" class="flex items-center justify-center min-h-full text-gray-500 text-sm">
       Загрузка PDF...
@@ -23,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import api from '@/services/api'
 
 // Lazy-load pdfjs to avoid bloating the initial bundle
@@ -59,12 +58,20 @@ function mountCanvas(el, n) {
   if (pdfDoc) renderPage(n)
 }
 
+function getContainerWidth() {
+  // getBoundingClientRect is reliable on iOS inside fixed modals;
+  // clientWidth can return 0 when layout isn't settled yet.
+  const rect = container.value?.getBoundingClientRect?.()
+  const w = rect?.width || container.value?.clientWidth || 0
+  return Math.max(w > 0 ? w : window.innerWidth, 200) - 8
+}
+
 async function renderPage(n) {
   const canvas = canvasMap[n]
   if (!canvas || !pdfDoc) return
   try {
     const page = await pdfDoc.getPage(n)
-    const containerWidth = (container.value?.clientWidth || 360) - 8
+    const containerWidth = getContainerWidth()
     const baseViewport = page.getViewport({ scale: 1 })
     const dpr = window.devicePixelRatio || 1
     const scale = (containerWidth / baseViewport.width) * dpr
@@ -74,6 +81,7 @@ async function renderPage(n) {
     canvas.height = viewport.height
     canvas.style.width = `${containerWidth}px`
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`
+    canvas.style.maxWidth = '100%'
 
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
   } catch {
@@ -107,7 +115,12 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  // Wait one frame so the container has been laid out and
+  // getBoundingClientRect() returns the correct width on iOS Safari.
+  await nextTick()
+  load()
+})
 onUnmounted(() => {
   destroyed = true
   pdfDoc?.destroy()

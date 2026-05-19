@@ -96,7 +96,6 @@
           <PdfViewer
             v-if="currentViewerType === 'pdf'"
             :material-id="String(currentMat.id)"
-            class="w-full h-full"
           />
 
           <!-- Image -->
