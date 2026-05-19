@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import api from '@/services/api'
 
 // Lazy-load pdfjs to avoid bloating the initial bundle
@@ -59,11 +59,13 @@ function mountCanvas(el, n) {
 }
 
 function getContainerWidth() {
-  // getBoundingClientRect is reliable on iOS inside fixed modals;
-  // clientWidth can return 0 when layout isn't settled yet.
+  // On iOS Safari inside a fixed modal, clientWidth/getBoundingClientRect can
+  // return 0 before the first paint. window.innerWidth is always reliable.
   const rect = container.value?.getBoundingClientRect?.()
-  const w = rect?.width || container.value?.clientWidth || 0
-  return Math.max(w > 0 ? w : window.innerWidth, 200) - 8
+  const w = (rect && rect.width > 10 ? rect.width : null)
+    ?? (container.value?.clientWidth > 10 ? container.value.clientWidth : null)
+    ?? window.innerWidth
+  return Math.max(w, 200) - 8
 }
 
 async function renderPage(n) {
@@ -115,11 +117,12 @@ async function load() {
   }
 }
 
-onMounted(async () => {
-  // Wait one frame so the container has been laid out and
-  // getBoundingClientRect() returns the correct width on iOS Safari.
-  await nextTick()
-  load()
+onMounted(() => {
+  // Use requestAnimationFrame so iOS Safari has finished its initial layout
+  // pass before we measure dimensions and kick off rendering.
+  requestAnimationFrame(() => {
+    if (!destroyed) load()
+  })
 })
 onUnmounted(() => {
   destroyed = true
