@@ -194,18 +194,28 @@ async function load() {
   try {
     const lib = await getPdfJs()
     if (destroyed) return
-    const { data: blob } = await api.get(`/learner/materials/${props.materialId}/view`, { responseType: 'blob' })
-    if (destroyed) return
-    const buf = await blob.arrayBuffer()
-    if (destroyed) return
 
     if (isIOS) {
+      // fetch() with token in URL — no Authorization header, no CORS preflight.
+      // response.arrayBuffer() works on iOS 10.3+.
+      // blob.arrayBuffer() requires iOS 14.1+ — that's why api.get blob path fails on older iOS.
+      const token = localStorage.getItem('access_token') || ''
+      const url = `/api/v1/learner/materials/${props.materialId}/view?token=${encodeURIComponent(token)}`
+      const resp = await fetch(url)
+      if (destroyed) return
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+      const buf = await resp.arrayBuffer()
+      if (destroyed) return
       iosPdfDoc = await lib.getDocument({ data: buf }).promise
       if (destroyed) return
       totalPages.value = iosPdfDoc.numPages
       loading.value = false
-      // watch(iosCanvas) below fires when canvas enters the DOM and calls renderIOSPage()
+      // watch(iosCanvas, {flush:'post'}) below triggers renderIOSPage when canvas mounts
     } else {
+      const { data: blob } = await api.get(`/learner/materials/${props.materialId}/view`, { responseType: 'blob' })
+      if (destroyed) return
+      const buf = await blob.arrayBuffer()
+      if (destroyed) return
       androidPdfDoc = await lib.getDocument({ data: buf }).promise
       if (destroyed) return
       pageCount.value = androidPdfDoc.numPages
@@ -213,7 +223,15 @@ async function load() {
     }
   } catch(e) {
     console.error('[PdfViewer] load error:', e)
-    if (!destroyed) { error.value = 'Не удалось загрузить PDF'; loading.value = false }
+    if (!destroyed) {
+      error.value = (e && e.message ? e.message : String(e)) || 'Не удалось загрузить PDF'
+      loading.value = false
+    }
+  }
+}
+      error.value = (e && e.message ? e.message : String(e)) || 'Не удалось загрузить PDF'
+      loading.value = false
+    }
   }
 }
 
