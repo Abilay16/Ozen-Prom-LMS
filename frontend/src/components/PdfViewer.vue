@@ -1,32 +1,59 @@
 ﻿<template>
+  <!-- Android: width only (parent content-area is the scroll container for multipage) -->
+  <!-- iOS: height:100% (internal flex layout with its own scroll) -->
+  <!-- Desktop: height:100% (iframe fills) -->
   <div :style="isAndroid ? 'width:100%;' : 'width:100%;height:100%;'">
     <div v-if="loading" style="padding:40px 0;text-align:center;color:#6b7280;font-size:14px;">
       Загрузка PDF...
     </div>
     <div v-else-if="error" style="padding:40px 16px;text-align:center;">
-      <div style="font-size:40px;">&#9888;&#65039;</div>
+      <span style="font-size:40px;">&#9888;&#65039;</span>
       <p style="color:#f87171;font-size:14px;margin-top:8px;">{{ error }}</p>
     </div>
 
-    <!-- iOS Safari & Desktop: direct URL in iframe.
-         Safari CANNOT render PDFs from blob: URLs — requires a real HTTP URL.
-         Chrome/Firefox/Edge also handle direct-URL iframes natively. -->
+    <!-- iOS: single-page PDF.js with zoom and page navigation.
+         iframe inside position:fixed does NOT scroll on iOS — known WebKit limitation.
+         PDF.js single-page avoids canvas GPU memory limits (no blank pages). -->
+    <div v-else-if="isIOS" style="height:100%;display:flex;flex-direction:column;">
+      <!-- Controls -->
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#e5e7eb;flex-shrink:0;">
+        <button @click="zoomOut"
+          style="width:32px;height:32px;font-size:20px;border-radius:6px;background:#fff;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;cursor:pointer;">−</button>
+        <span style="font-size:13px;color:#374151;min-width:40px;text-align:center;">{{ Math.round(zoom*100) }}%</span>
+        <button @click="zoomIn"
+          style="width:32px;height:32px;font-size:20px;border-radius:6px;background:#fff;border:1px solid #d1d5db;display:flex;align-items:center;justify-content:center;cursor:pointer;">+</button>
+        <div style="flex:1;"></div>
+        <button @click="prevPage" :disabled="currentPage <= 1"
+          style="padding:4px 12px;border-radius:6px;background:#fff;border:1px solid #d1d5db;font-size:13px;cursor:pointer;opacity:1;"
+          :style="currentPage <= 1 ? 'opacity:0.35;cursor:default;' : ''">◀</button>
+        <span style="font-size:13px;color:#374151;">{{ currentPage }} / {{ totalPages }}</span>
+        <button @click="nextPage" :disabled="currentPage >= totalPages"
+          style="padding:4px 12px;border-radius:6px;background:#fff;border:1px solid #d1d5db;font-size:13px;cursor:pointer;"
+          :style="currentPage >= totalPages ? 'opacity:0.35;cursor:default;' : ''">▶</button>
+      </div>
+      <!-- Scrollable canvas area -->
+      <div style="flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;justify-content:center;align-items:flex-start;background:#f3f4f6;padding:8px 0;">
+        <canvas ref="iosCanvas" style="display:block;flex-shrink:0;"/>
+      </div>
+    </div>
+
+    <!-- Desktop: direct URL iframe (Chrome/Firefox/Edge built-in PDF viewer) -->
     <iframe
-      v-else-if="!isAndroid"
+      v-else-if="isDesktop"
       :src="directUrl"
       style="width:100%;height:100%;border:none;display:block;"
     />
 
-    <!-- Android Chrome: PDF.js canvas rendering -->
+    <!-- Android: multi-page PDF.js (parent content-area scrolls) -->
     <div
       v-else
-      ref="container"
+      ref="androidContainer"
       style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 4px;"
     >
       <canvas
         v-for="n in pageCount"
         :key="n"
-        :ref="el => mountCanvas(el, n)"
+        :ref="el => mountAndroidCanvas(el, n)"
         style="display:block;"
       />
     </div>
@@ -38,13 +65,15 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import api from '@/services/api'
 
 const isAndroid = /Android/i.test(navigator.userAgent)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const isDesktop = !isAndroid && !isIOS
 
 const props = defineProps({
   materialId: { type: String, required: true },
 })
 
-// iOS / Desktop: direct URL with token in query param.
-// This is the only reliable way to show PDFs in Safari iframe.
+// Desktop: direct URL iframe
 const directUrl = computed(() => {
   const token = localStorage.getItem('access_token') || ''
   return `/api/v1/learner/materials/${props.materialId}/view?token=${encodeURIComponent(token)}`
@@ -53,38 +82,59 @@ const directUrl = computed(() => {
 const loading = ref(true)
 const error = ref(null)
 
-// PDF.js state — Android only
-const pageCount = ref(0)
-const container = ref(null)
-let pdfjsLib = null
-let pdfDoc = null
-let destroyed = false
-const canvasMap = {}
+// ── iOS state ──────────────────────────────────────
+const iosCanvas = ref(null)
+const currentPage = ref(1)
+const totalPages = ref(0)
+const zoom = ref(1.0)   // 1.0 = fit to screen width
+let iosPdfDoc = null
 
-async function getPdfJs() {
-  if (!pdfjsLib) {
-    pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url
-    ).href
-  }
-  return pdfjsLib
-}
-
-function mountCanvas(el, n) {
-  if (!el) return
-  canvasMap[n] = el
-  if (pdfDoc) renderPage(n)
-}
-
-async function renderPage(n) {
-  const canvas = canvasMap[n]
-  if (!canvas || !pdfDoc) return
+async function renderIOSPage() {
+  if (!iosPdfDoc || !iosCanvas.value) return
   try {
-    const page = await pdfDoc.getPage(n)
-    const parent = container.value?.parentElement
+    const page = await iosPdfDoc.getPage(currentPage.value)
+    const baseViewport = page.getViewport({ scale: 1 })
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const containerWidth = window.innerWidth - 16  // 8px padding each side
+    const fitScale = containerWidth / baseViewport.width
+    const renderScale = fitScale * zoom.value * dpr
+    const cssWidth = Math.round(baseViewport.width * fitScale * zoom.value)
+    const cssHeight = Math.round(baseViewport.height * fitScale * zoom.value)
+    const vp = page.getViewport({ scale: renderScale })
+    const canvas = iosCanvas.value
+    canvas.width = vp.width
+    canvas.height = vp.height
+    canvas.style.width = cssWidth + 'px'
+    canvas.style.height = cssHeight + 'px'
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+  } catch { /* ignore */ }
+}
+
+function prevPage() { if (currentPage.value > 1) { currentPage.value--; renderIOSPage() } }
+function nextPage() { if (currentPage.value < totalPages.value) { currentPage.value++; renderIOSPage() } }
+function zoomIn()  { zoom.value = Math.min(zoom.value * 1.4, 4); renderIOSPage() }
+function zoomOut() { zoom.value = Math.max(zoom.value / 1.4, 0.5); renderIOSPage() }
+
+// ── Android state ──────────────────────────────────
+const pageCount = ref(0)
+const androidContainer = ref(null)
+const androidCanvasMap = {}
+let androidPdfDoc = null
+
+function mountAndroidCanvas(el, n) {
+  if (!el) return
+  androidCanvasMap[n] = el
+  if (androidPdfDoc) renderAndroidPage(n)
+}
+
+async function renderAndroidPage(n) {
+  const canvas = androidCanvasMap[n]
+  if (!canvas || !androidPdfDoc) return
+  try {
+    const page = await androidPdfDoc.getPage(n)
+    const parent = androidContainer.value?.parentElement
     const w = (parent?.clientWidth > 10 ? parent.clientWidth : null)
-      ?? (container.value?.clientWidth > 10 ? container.value.clientWidth : null)
+      ?? (androidContainer.value?.clientWidth > 10 ? androidContainer.value.clientWidth : null)
       ?? window.innerWidth
     const containerWidth = Math.max(w, 200) - 8
     const baseViewport = page.getViewport({ scale: 1 })
@@ -99,23 +149,37 @@ async function renderPage(n) {
   } catch { /* ignore */ }
 }
 
-function load() {
+// ── Shared ──────────────────────────────────────────
+let pdfjsLib = null
+let destroyed = false
+
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url
+    ).href
+  }
+  return pdfjsLib
+}
+
+async function load() {
   if (!props.materialId) return
   loading.value = true
   error.value = null
-
-  if (!isAndroid) {
-    // directUrl computed prop handles it; just dismiss the spinner
-    loading.value = false
-  } else {
-    loadAndroid()
-  }
-}
-
-async function loadAndroid() {
+  currentPage.value = 1
+  zoom.value = 1.0
+  totalPages.value = 0
   pageCount.value = 0
-  Object.keys(canvasMap).forEach(k => delete canvasMap[k])
-  if (pdfDoc) { pdfDoc.destroy(); pdfDoc = null }
+  Object.keys(androidCanvasMap).forEach(k => delete androidCanvasMap[k])
+  iosPdfDoc?.destroy(); iosPdfDoc = null
+  androidPdfDoc?.destroy(); androidPdfDoc = null
+
+  if (isDesktop) {
+    loading.value = false
+    return
+  }
+
   try {
     const lib = await getPdfJs()
     if (destroyed) return
@@ -123,16 +187,31 @@ async function loadAndroid() {
     if (destroyed) return
     const buf = await blob.arrayBuffer()
     if (destroyed) return
-    pdfDoc = await lib.getDocument({ data: buf }).promise
-    if (destroyed) return
-    pageCount.value = pdfDoc.numPages
-    loading.value = false
+
+    if (isIOS) {
+      iosPdfDoc = await lib.getDocument({ data: buf }).promise
+      if (destroyed) return
+      totalPages.value = iosPdfDoc.numPages
+      loading.value = false
+      // render after Vue updates the DOM
+      await new Promise(r => setTimeout(r, 50))
+      renderIOSPage()
+    } else {
+      androidPdfDoc = await lib.getDocument({ data: buf }).promise
+      if (destroyed) return
+      pageCount.value = androidPdfDoc.numPages
+      loading.value = false
+    }
   } catch {
     if (!destroyed) { error.value = 'Не удалось загрузить PDF'; loading.value = false }
   }
 }
 
 onMounted(() => { requestAnimationFrame(() => { if (!destroyed) load() }) })
-onUnmounted(() => { destroyed = true; pdfDoc?.destroy() })
+onUnmounted(() => {
+  destroyed = true
+  iosPdfDoc?.destroy()
+  androidPdfDoc?.destroy()
+})
 watch(() => props.materialId, load)
 </script>
