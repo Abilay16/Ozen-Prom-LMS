@@ -229,11 +229,6 @@ async function load() {
     }
   }
 }
-      error.value = (e && e.message ? e.message : String(e)) || 'Не удалось загрузить PDF'
-      loading.value = false
-    }
-  }
-}
 
 // flush:'post' ensures the watch fires AFTER Vue has written the canvas element to the DOM.
 // Default flush:'pre' fires before DOM update — canvas may not exist yet on Safari.
