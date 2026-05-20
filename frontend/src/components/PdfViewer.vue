@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import api from '@/services/api'
 
 const isAndroid = /Android/i.test(navigator.userAgent)
@@ -193,8 +193,8 @@ async function load() {
       if (destroyed) return
       totalPages.value = iosPdfDoc.numPages
       loading.value = false
-      // render after Vue updates the DOM
-      await new Promise(r => setTimeout(r, 50))
+      // wait for Vue to mount the canvas DOM node
+      await nextTick()
       renderIOSPage()
     } else {
       androidPdfDoc = await lib.getDocument({ data: buf }).promise
