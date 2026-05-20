@@ -166,18 +166,9 @@ let destroyed = false
 
 async function getPdfJs() {
   if (!pdfjsLib) {
-    // Promise.withResolvers is used by pdfjs-dist v4+ but only available in Safari 17+ / iOS 17+.
-    // Polyfill it for older devices.
-    if (typeof Promise.withResolvers === 'undefined') {
-      Promise.withResolvers = function() {
-        let resolve, reject
-        const promise = new Promise((res, rej) => { resolve = res; reject = rej })
-        return { promise, resolve, reject }
-      }
-    }
     pdfjsLib = await import('pdfjs-dist')
     pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url
+      'pdfjs-dist/build/pdf.worker.min.js', import.meta.url
     ).href
   }
   return pdfjsLib
