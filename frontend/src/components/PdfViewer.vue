@@ -1,21 +1,23 @@
-<template>
-  <!-- Single root. Height 100% only when using iframe (iOS/Desktop) so it fills the content-area. -->
-  <div :style="useIframe ? 'width:100%;height:100%;' : 'width:100%;'">
+﻿<template>
+  <div :style="isAndroid ? 'width:100%;' : 'width:100%;height:100%;'">
     <div v-if="loading" style="padding:40px 0;text-align:center;color:#6b7280;font-size:14px;">
       Загрузка PDF...
     </div>
     <div v-else-if="error" style="padding:40px 16px;text-align:center;">
-      <div style="font-size:40px;">⚠️</div>
+      <div style="font-size:40px;">&#9888;&#65039;</div>
       <p style="color:#f87171;font-size:14px;margin-top:8px;">{{ error }}</p>
     </div>
-    <!-- iOS Safari & Desktop: native PDF rendering inside iframe via blob URL.
-         Safari has a built-in PDF engine that supports pinch-zoom and scroll. -->
+
+    <!-- iOS Safari & Desktop: direct URL in iframe.
+         Safari CANNOT render PDFs from blob: URLs — requires a real HTTP URL.
+         Chrome/Firefox/Edge also handle direct-URL iframes natively. -->
     <iframe
-      v-else-if="useIframe"
-      :src="blobUrl"
+      v-else-if="!isAndroid"
+      :src="directUrl"
       style="width:100%;height:100%;border:none;display:block;"
     />
-    <!-- Android: PDF.js canvas rendering (works reliably, no iframe PDF support) -->
+
+    <!-- Android Chrome: PDF.js canvas rendering -->
     <div
       v-else
       ref="container"
@@ -32,41 +34,42 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import api from '@/services/api'
 
-// iOS Safari: use native iframe + blob URL.
-// It renders PDFs natively with pinch-zoom and proper scroll.
-// Android Chrome: use PDF.js (iframe PDF support is unreliable on Android).
-// Desktop: also use iframe — Chrome/Firefox/Edge have a built-in PDF viewer.
 const isAndroid = /Android/i.test(navigator.userAgent)
-const useIframe = !isAndroid
 
 const props = defineProps({
   materialId: { type: String, required: true },
 })
 
+// iOS / Desktop: direct URL with token in query param.
+// This is the only reliable way to show PDFs in Safari iframe.
+const directUrl = computed(() => {
+  const token = localStorage.getItem('access_token') || ''
+  return `/api/v1/learner/materials/${props.materialId}/view?token=${encodeURIComponent(token)}`
+})
+
 const loading = ref(true)
 const error = ref(null)
-const blobUrl = ref(null)   // used when useIframe
-const pageCount = ref(0)    // used when !useIframe (PDF.js)
-const container = ref(null) // used when !useIframe
 
+// PDF.js state — Android only
+const pageCount = ref(0)
+const container = ref(null)
 let pdfjsLib = null
+let pdfDoc = null
+let destroyed = false
+const canvasMap = {}
+
 async function getPdfJs() {
   if (!pdfjsLib) {
     pdfjsLib = await import('pdfjs-dist')
     pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url
+      'pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url
     ).href
   }
   return pdfjsLib
 }
-
-let pdfDoc = null
-let destroyed = false
-const canvasMap = {}
 
 function mountCanvas(el, n) {
   if (!el) return
@@ -93,55 +96,43 @@ async function renderPage(n) {
     canvas.style.width = `${containerWidth}px`
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-  } catch { /* ignore single-page errors */ }
+  } catch { /* ignore */ }
 }
 
-async function load() {
+function load() {
   if (!props.materialId) return
   loading.value = true
   error.value = null
 
-  // Clean up previous state
-  if (blobUrl.value) { URL.revokeObjectURL(blobUrl.value); blobUrl.value = null }
+  if (!isAndroid) {
+    // directUrl computed prop handles it; just dismiss the spinner
+    loading.value = false
+  } else {
+    loadAndroid()
+  }
+}
+
+async function loadAndroid() {
   pageCount.value = 0
   Object.keys(canvasMap).forEach(k => delete canvasMap[k])
   if (pdfDoc) { pdfDoc.destroy(); pdfDoc = null }
-
   try {
-    // Fetch as blob — works for both paths; Axios sends Authorization header correctly
-    const { data: blob } = await api.get(`/learner/materials/${props.materialId}/view`, {
-      responseType: 'blob',
-    })
+    const lib = await getPdfJs()
     if (destroyed) return
-
-    if (useIframe) {
-      // iOS / Desktop: create an object URL and let the browser render natively
-      blobUrl.value = URL.createObjectURL(blob)
-      loading.value = false
-    } else {
-      // Android: parse with PDF.js
-      const lib = await getPdfJs()
-      if (destroyed) return
-      const arrayBuffer = await blob.arrayBuffer()
-      if (destroyed) return
-      pdfDoc = await lib.getDocument({ data: arrayBuffer }).promise
-      if (destroyed) return
-      pageCount.value = pdfDoc.numPages
-      loading.value = false
-    }
+    const { data: blob } = await api.get(`/learner/materials/${props.materialId}/view`, { responseType: 'blob' })
+    if (destroyed) return
+    const buf = await blob.arrayBuffer()
+    if (destroyed) return
+    pdfDoc = await lib.getDocument({ data: buf }).promise
+    if (destroyed) return
+    pageCount.value = pdfDoc.numPages
+    loading.value = false
   } catch {
-    if (!destroyed) {
-      error.value = 'Не удалось загрузить PDF'
-      loading.value = false
-    }
+    if (!destroyed) { error.value = 'Не удалось загрузить PDF'; loading.value = false }
   }
 }
 
 onMounted(() => { requestAnimationFrame(() => { if (!destroyed) load() }) })
-onUnmounted(() => {
-  destroyed = true
-  if (blobUrl.value) URL.revokeObjectURL(blobUrl.value)
-  pdfDoc?.destroy()
-})
+onUnmounted(() => { destroyed = true; pdfDoc?.destroy() })
 watch(() => props.materialId, load)
 </script>
