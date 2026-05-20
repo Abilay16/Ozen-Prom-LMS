@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import api from '@/services/api'
 
 const isAndroid = /Android/i.test(navigator.userAgent)
@@ -90,12 +90,14 @@ const zoom = ref(1.0)   // 1.0 = fit to screen width
 let iosPdfDoc = null
 
 async function renderIOSPage() {
-  if (!iosPdfDoc || !iosCanvas.value) return
+  if (!iosPdfDoc) return
+  // If canvas isn't mounted yet, wait for the watch(iosCanvas) to fire
+  if (!iosCanvas.value) return
   try {
     const page = await iosPdfDoc.getPage(currentPage.value)
     const baseViewport = page.getViewport({ scale: 1 })
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const containerWidth = window.innerWidth - 16  // 8px padding each side
+    const containerWidth = (window.innerWidth || 375) - 16
     const fitScale = containerWidth / baseViewport.width
     const renderScale = fitScale * zoom.value * dpr
     const cssWidth = Math.round(baseViewport.width * fitScale * zoom.value)
@@ -106,8 +108,12 @@ async function renderIOSPage() {
     canvas.height = vp.height
     canvas.style.width = cssWidth + 'px'
     canvas.style.height = cssHeight + 'px'
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
-  } catch { /* ignore */ }
+    const ctx = canvas.getContext('2d')
+    if (!ctx) { console.error('[PdfViewer] getContext(2d) returned null'); return }
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+  } catch(e) {
+    console.error('[PdfViewer iOS] render error:', e)
+  }
 }
 
 function prevPage() { if (currentPage.value > 1) { currentPage.value--; renderIOSPage() } }
@@ -193,19 +199,24 @@ async function load() {
       if (destroyed) return
       totalPages.value = iosPdfDoc.numPages
       loading.value = false
-      // wait for Vue to mount the canvas DOM node
-      await nextTick()
-      renderIOSPage()
+      // watch(iosCanvas) below fires when canvas enters the DOM and calls renderIOSPage()
     } else {
       androidPdfDoc = await lib.getDocument({ data: buf }).promise
       if (destroyed) return
       pageCount.value = androidPdfDoc.numPages
       loading.value = false
     }
-  } catch {
+  } catch(e) {
+    console.error('[PdfViewer] load error:', e)
     if (!destroyed) { error.value = 'Не удалось загрузить PDF'; loading.value = false }
   }
 }
+
+// When the iOS canvas mounts into the DOM (after loading becomes false),
+// the ref fires and we render. This is more reliable than nextTick() on Safari.
+watch(iosCanvas, (el) => {
+  if (el && iosPdfDoc) renderIOSPage()
+})
 
 onMounted(() => { requestAnimationFrame(() => { if (!destroyed) load() }) })
 onUnmounted(() => {
