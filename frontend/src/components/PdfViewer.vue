@@ -31,6 +31,8 @@
           style="padding:4px 12px;border-radius:6px;background:#fff;border:1px solid #d1d5db;font-size:13px;cursor:pointer;"
           :style="currentPage >= totalPages ? 'opacity:0.35;cursor:default;' : ''">▶</button>
       </div>
+      <!-- Debug status — remove after fix confirmed -->
+      <div style="font-size:10px;color:#666;padding:2px 10px;background:#f9fafb;flex-shrink:0;">{{ iosStatus }}</div>
       <!-- Scrollable canvas area -->
       <div style="flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;display:flex;justify-content:center;align-items:flex-start;background:#f3f4f6;padding:8px 0;">
         <canvas ref="iosCanvas" style="display:block;flex-shrink:0;"/>
@@ -61,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import api from '@/services/api'
 
 const isAndroid = /Android/i.test(navigator.userAgent)
@@ -87,12 +89,13 @@ const iosCanvas = ref(null)
 const currentPage = ref(1)
 const totalPages = ref(0)
 const zoom = ref(1.0)   // 1.0 = fit to screen width
+const iosStatus = ref('init')
 let iosPdfDoc = null
 
 async function renderIOSPage() {
-  if (!iosPdfDoc) return
-  // If canvas isn't mounted yet, wait for the watch(iosCanvas) to fire
-  if (!iosCanvas.value) return
+  if (!iosPdfDoc) { iosStatus.value = 'no-doc'; return }
+  if (!iosCanvas.value) { iosStatus.value = 'no-canvas'; return }
+  iosStatus.value = 'rendering p' + currentPage.value
   try {
     const page = await iosPdfDoc.getPage(currentPage.value)
     const baseViewport = page.getViewport({ scale: 1 })
@@ -109,9 +112,11 @@ async function renderIOSPage() {
     canvas.style.width = cssWidth + 'px'
     canvas.style.height = cssHeight + 'px'
     const ctx = canvas.getContext('2d')
-    if (!ctx) { console.error('[PdfViewer] getContext(2d) returned null'); return }
+    if (!ctx) { iosStatus.value = 'err:no-ctx'; return }
     await page.render({ canvasContext: ctx, viewport: vp }).promise
+    iosStatus.value = 'ok p' + currentPage.value + ' ' + cssWidth + 'x' + cssHeight
   } catch(e) {
+    iosStatus.value = 'err:' + (e && e.message ? e.message.slice(0,60) : String(e))
     console.error('[PdfViewer iOS] render error:', e)
   }
 }
@@ -212,10 +217,17 @@ async function load() {
   }
 }
 
-// When the iOS canvas mounts into the DOM (after loading becomes false),
-// the ref fires and we render. This is more reliable than nextTick() on Safari.
+// flush:'post' ensures the watch fires AFTER Vue has written the canvas element to the DOM.
+// Default flush:'pre' fires before DOM update — canvas may not exist yet on Safari.
 watch(iosCanvas, (el) => {
   if (el && iosPdfDoc) renderIOSPage()
+}, { flush: 'post' })
+
+// Backup: if watch(iosCanvas) misses (can happen on Safari), this catches the transition.
+watch(loading, (val) => {
+  if (!val && isIOS && iosPdfDoc) {
+    nextTick(() => { if (iosCanvas.value) renderIOSPage() })
+  }
 })
 
 onMounted(() => { requestAnimationFrame(() => { if (!destroyed) load() }) })
