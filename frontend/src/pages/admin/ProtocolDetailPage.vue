@@ -421,7 +421,11 @@ async function saveMainForm() {
     if (!payload.check_type) delete payload.check_type
     if (isNew.value) {
       const res = await api.post('/admin/protocols', payload)
-      router.replace(`/admin/protocols/${res.data.id}`)
+      // Load protocol BEFORE router.replace so protocol.value is non-null when
+      // isNew becomes false and the commission/participants sections render.
+      protocol.value = res.data
+      await router.replace(`/admin/protocols/${res.data.id}`)
+      await loadProtocol()
       flash('Протокол создан')
     } else {
       await api.patch(`/admin/protocols/${route.params.id}`, payload)

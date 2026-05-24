@@ -626,28 +626,16 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
     if protocol.status == ProtocolStatus.awaiting_signatures:
         raise HTTPException(status_code=409, detail="Протокол на подписи, изменение участников недоступно")
 
-    # ── Validate: all assignments in this batch must be 'passed' ──────────────
-    non_passed_result = await db.execute(
-        select(User.full_name, UserCourseAssignment.status)
-        .join(UserCourseAssignment, UserCourseAssignment.user_id == User.id)
-        .where(
-            UserCourseAssignment.batch_id == protocol.batch_id,
-            UserCourseAssignment.status != AssignmentStatus.passed,
-        )
-    )
-    non_passed_rows = non_passed_result.all()
-    if non_passed_rows:
-        details = ", ".join(f"{name} ({status.value})" for name, status in non_passed_rows[:3])
-        raise HTTPException(
-            status_code=409,
-            detail=f"Не все участники потока завершили обучение: {details}",
-        )
-
-    # Distinct users assigned to this batch
+    # Distinct users assigned to this batch WHO HAVE PASSED.
+    # We only import passed participants — users with other statuses are silently skipped.
+    # This avoids blocking the import when some batch members haven't started yet.
     result = await db.execute(
         select(User)
         .join(UserCourseAssignment, UserCourseAssignment.user_id == User.id)
-        .where(UserCourseAssignment.batch_id == protocol.batch_id)
+        .where(
+            UserCourseAssignment.batch_id == protocol.batch_id,
+            UserCourseAssignment.status == AssignmentStatus.passed,
+        )
         .distinct()
         .options(selectinload(User.position))
     )
