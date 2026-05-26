@@ -74,3 +74,14 @@ Screenshots/
 TZ_agent_Ozen_Prom_LMS.docx
 TZ_agent_Ozen_Prom_LMS_v2.md
 Final_vision_of_project.md
+
+# Office / data files — never commit real user data
+*.xlsx
+*.xls
+*.xlsm
+*.doc
+*.docx
+*.pdf
+*.csv
+# Allow sample/template files if explicitly needed:
+# !storage/sample_employees.xlsx
