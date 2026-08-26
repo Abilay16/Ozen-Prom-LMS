@@ -251,6 +251,7 @@ async def verify_certificate(cert_id: UUID, db: DB):
     # Load protocol + commission signatures
     protocol_number = None
     signers = []
+    proto = None
     if cert.protocol_id:
         proto_q = await db.execute(
             select(Protocol)
@@ -281,6 +282,28 @@ async def verify_certificate(cert_id: UUID, db: DB):
         if cert_user and cert_user.photo_path:
             photo_url = f"/api/v1/users/{cert.user_id}/photo"
 
+    protocol_out = None
+    if proto:
+        protocol_out = {
+            "protocol_number": proto.protocol_number,
+            "exam_date": proto.exam_date,
+            "check_type": proto.check_type.value if proto.check_type else None,
+            "commission_members": [
+                {
+                    "id": m.id,
+                    "role": m.role.value,
+                    "position_title": m.position_title,
+                    "full_name": m.full_name,
+                    "signed_at": m.signed_at.isoformat() if m.signed_at else None,
+                    "signer_cert_serial": m.signer_cert_serial,
+                    "signer_cert_owner": m.signer_cert_owner,
+                    "signer_cert_valid_from": m.signer_cert_valid_from.isoformat() if m.signer_cert_valid_from else None,
+                    "signer_cert_valid_to": m.signer_cert_valid_to.isoformat() if m.signer_cert_valid_to else None,
+                }
+                for m in sorted(proto.commission_members, key=lambda x: x.sort_order)
+            ],
+        }
+
     return {
         "id": cert.id,
         "status": status,
@@ -289,12 +312,18 @@ async def verify_certificate(cert_id: UUID, db: DB):
         "full_name": cert.full_name,
         "organization_name": cert.organization_name,
         "position": cert.position,
-        "training_type": cert.training_type.name_ru if cert.training_type else None,
+        "training_type": {
+            "code": cert.training_type.code,
+            "name_ru": cert.training_type.name_ru,
+            "name_short": cert.training_type.name_short,
+        } if cert.training_type else None,
+        # Kept for backward-compat with older clients
         "training_type_short": cert.training_type.name_short if cert.training_type else None,
         "training_type_code": cert.training_type.code if cert.training_type else None,
         "issued_date": cert.issued_date,
         "valid_until": cert.valid_until,
         "protocol_number": protocol_number,
+        "protocol": protocol_out,
         "signers": signers,
         "user_id": cert.user_id,
         "photo_url": photo_url,
