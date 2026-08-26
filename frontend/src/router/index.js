@@ -90,6 +90,11 @@ const router = createRouter({
       component: () => import('@/pages/public/WorkerCardPage.vue'),
     },
     {
+      path: '/verify/:id/protocol',
+      name: 'verify-protocol',
+      component: () => import('@/pages/public/VerifyProtocolPage.vue'),
+    },
+    {
       path: '/verify/:id',
       name: 'verify',
       component: () => import('@/pages/public/VerifyPage.vue'),

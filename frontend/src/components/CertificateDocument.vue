@@ -333,26 +333,24 @@
           </div>
         </div>
 
-        <!-- Commission signatures (all members) -->
-        <div v-if="protocol && protocol.commission_members?.length" style="margin-top:20px; font-size:13px;">
-          <div v-for="m in protocol.commission_members" :key="m.id" style="margin-bottom:16px;">
-            <div style="font-weight:600; margin-bottom:4px;">
-              {{ m.role === 'chair' ? 'Председатель экзаменационной комиссии' : 'Член комиссии' }}
-              <span v-if="m.position_title" style="font-weight:normal; color:#555;"> — {{ m.position_title }}</span>
-            </div>
-            <!-- EDS stamp -->
-            <div v-if="m.signer_cert_serial" style="margin:4px 0 4px 16px;">
-              <SignatureStamp
-                :serial="m.signer_cert_serial"
-                :owner="m.signer_cert_owner"
-                :valid-from="m.signer_cert_valid_from"
-                :valid-to="m.signer_cert_valid_to"
-                :signed-at="m.signed_at"
-              />
-            </div>
-            <div v-else style="border-bottom:1px solid #999; width:200px; margin:8px 0 4px 16px;"></div>
-            <div style="color:#333; margin-left:16px;">{{ m.full_name }}</div>
+        <!-- Commission signature (chair only) -->
+        <div v-if="protocolChair" style="margin-top:20px; font-size:13px;">
+          <div style="font-weight:600; margin-bottom:4px;">
+            Председатель экзаменационной комиссии
+            <span v-if="protocolChair.position_title" style="font-weight:normal; color:#555;"> — {{ protocolChair.position_title }}</span>
           </div>
+          <!-- EDS stamp -->
+          <div v-if="protocolChair.signer_cert_serial" style="margin:4px 0 4px 16px;">
+            <SignatureStamp
+              :serial="protocolChair.signer_cert_serial"
+              :owner="protocolChair.signer_cert_owner"
+              :valid-from="protocolChair.signer_cert_valid_from"
+              :valid-to="protocolChair.signer_cert_valid_to"
+              :signed-at="protocolChair.signed_at"
+            />
+          </div>
+          <div v-else style="border-bottom:1px solid #999; width:200px; margin:8px 0 4px 16px;"></div>
+          <div style="color:#333; margin-left:16px;">{{ protocolChair.full_name }}</div>
         </div>
 
         <!-- Fallback stamp (chair only) if no protocol loaded -->
@@ -382,6 +380,15 @@
       </div>
     </template><!-- /v-else БиОТ -->
 
+    <div v-if="protocol" class="no-print" style="max-width:800px; margin:16px auto 0; text-align:center;">
+      <router-link
+        :to="`/verify/${cert.id}/protocol`"
+        style="display:inline-block; font-size:13px; color:#1a3a5c; border:1px solid #1a3a5c; border-radius:6px; padding:8px 16px; text-decoration:none;"
+      >
+        📄 Посмотреть протокол
+      </router-link>
+    </div>
+
   </div><!-- /id="certificate" -->
 </template>
 
@@ -398,6 +405,10 @@ const props = defineProps({
 
 const isPromBez = computed(() => props.cert?.training_type?.code === 'prombez')
 const isPtm = computed(() => props.cert?.training_type?.code === 'ptm')
+
+const protocolChair = computed(() =>
+  props.protocol?.commission_members?.find(m => m.role === 'chair') || null
+)
 
 const chairSignature = computed(() =>
   props.protocol?.commission_members?.find(m => m.role === 'chair' && m.signer_cert_serial) || null
@@ -446,6 +457,10 @@ function formatDate(d) {
 </script>
 
 <style scoped>
+@media print {
+  .no-print { display: none !important; }
+}
+
 /* ── Responsive 2-column grid for ПТМ and ПромБез certificates ── */
 .cert-grid {
   display: grid;

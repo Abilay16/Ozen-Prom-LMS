@@ -12,7 +12,7 @@ from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, DB
 from app.models.certificate import Certificate
 from app.models.training_type import TrainingType
 from app.models.user import User
-from app.models.protocol import Protocol, ProtocolCommissionMember
+from app.models.protocol import Protocol, ProtocolCommissionMember, ProtocolParticipant
 from app.core.exceptions import NotFoundError
 
 router = APIRouter()          # mounted at /admin/certificates
@@ -327,4 +327,65 @@ async def verify_certificate(cert_id: UUID, db: DB):
         "signers": signers,
         "user_id": cert.user_id,
         "photo_url": photo_url,
+    }
+
+
+@public_router.get("/verify/{cert_id}/protocol")
+async def verify_certificate_protocol(cert_id: UUID, db: DB):
+    """Public, privacy-scoped protocol view for one certificate — header info
+    plus only the participant row belonging to this certificate (never the
+    full participant list, which would leak other workers' personal data)."""
+    result = await db.execute(
+        select(Certificate).where(Certificate.id == cert_id)
+    )
+    cert = result.scalar_one_or_none()
+    if not cert or not cert.protocol_id:
+        raise NotFoundError("Протокол не найден")
+
+    proto_q = await db.execute(
+        select(Protocol)
+        .options(
+            selectinload(Protocol.commission_members),
+            selectinload(Protocol.organization),
+            selectinload(Protocol.batch),
+        )
+        .where(Protocol.id == cert.protocol_id)
+    )
+    proto = proto_q.scalar_one_or_none()
+    if not proto:
+        raise NotFoundError("Протокол не найден")
+
+    participant_row = None
+    if cert.participant_id:
+        part_q = await db.execute(
+            select(ProtocolParticipant).where(ProtocolParticipant.id == cert.participant_id)
+        )
+        participant_row = part_q.scalar_one_or_none()
+
+    return {
+        "protocol_number": proto.protocol_number,
+        "exam_date": proto.exam_date,
+        "check_type": proto.check_type.value if proto.check_type else None,
+        "order_number": proto.order_number,
+        "order_date": proto.order_date,
+        "legal_basis": proto.legal_basis,
+        "regulatory_docs": proto.regulatory_docs,
+        "organization_name": proto.organization.name if proto.organization else (proto.batch.name if proto.batch else None),
+        "training_type_code": cert.training_type.code if cert.training_type else None,
+        "commission_members": [
+            {
+                "id": m.id,
+                "role": m.role.value,
+                "position_title": m.position_title,
+                "full_name": m.full_name,
+            }
+            for m in sorted(proto.commission_members, key=lambda x: x.sort_order)
+        ],
+        "participant": {
+            "full_name": participant_row.full_name,
+            "organization_name": participant_row.organization_name,
+            "position": participant_row.position,
+            "education": participant_row.education,
+            "result": participant_row.result.value if participant_row.result else None,
+        } if participant_row else None,
     }

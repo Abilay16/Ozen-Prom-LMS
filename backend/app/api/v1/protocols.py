@@ -348,6 +348,11 @@ async def update_protocol(protocol_id: UUID, data: ProtocolUpdate, db: DB, admin
 @router.delete("/{protocol_id}", status_code=204)
 async def delete_protocol(protocol_id: UUID, db: DB, admin: CurrentSuperAdmin):
     protocol = await _get_protocol_or_404(protocol_id, db)
+    certs_q = await db.execute(
+        select(Certificate).where(Certificate.protocol_id == protocol_id)
+    )
+    for cert in certs_q.scalars().all():
+        await db.delete(cert)
     await db.delete(protocol)
     await db.commit()
 

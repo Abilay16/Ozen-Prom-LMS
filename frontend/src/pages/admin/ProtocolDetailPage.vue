@@ -307,6 +307,14 @@
               <div>Сдали: {{ passedCount }}</div>
               <div>Удостоверений выдано: {{ issuedCount }}</div>
             </div>
+
+            <template v-if="!isCommission">
+              <hr />
+              <button @click="deleteProtocol"
+                      class="w-full border border-red-300 text-red-600 py-2 rounded-lg text-sm font-medium hover:bg-red-50">
+                🗑 Удалить протокол
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -444,6 +452,19 @@ async function setStatus(status) {
   await api.patch(`/admin/protocols/${route.params.id}`, { status })
   await loadProtocol()
   flash('Протокол архивирован')
+}
+
+async function deleteProtocol() {
+  const warning = issuedCount.value > 0
+    ? `\n\nВНИМАНИЕ: будут безвозвратно удалены ${issuedCount.value} выданных удостоверений, связанных с этим протоколом.`
+    : ''
+  if (!confirm(`Удалить протокол № ${protocol.value.protocol_number} безвозвратно?${warning}`)) return
+  try {
+    await api.delete(`/admin/protocols/${route.params.id}`)
+    router.push('/admin/protocols')
+  } catch (e) {
+    flash(e.response?.data?.detail ?? 'Ошибка удаления', 'error')
+  }
 }
 
 async function addCommissionMember() {
