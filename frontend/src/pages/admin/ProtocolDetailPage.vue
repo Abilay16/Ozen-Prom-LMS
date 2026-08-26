@@ -502,7 +502,9 @@ async function importFromBatch() {
   try {
     const res = await api.post(`/admin/protocols/${route.params.id}/import-participants`)
     await loadProtocol()
-    flash(`Загружено: ${res.data.added} участников из потока`)
+    const skipped = res.data.skipped_already_certified
+    const skippedNote = skipped > 0 ? ` (пропущено ${skipped} уже аттестованных по этому виду проверки)` : ''
+    flash(`Загружено: ${res.data.added} участников из потока${skippedNote}`)
   } catch (e) {
     flash(e.response?.data?.detail ?? 'Ошибка импорта', 'error')
   } finally {

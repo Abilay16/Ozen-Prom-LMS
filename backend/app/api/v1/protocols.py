@@ -649,6 +649,23 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
     # Users already in the protocol
     existing_user_ids = {p.user_id for p in protocol.participants if p.user_id}
 
+    # Users already certified for this training type in any OTHER protocol
+    # (batches are reused across training rounds, so without this filter a
+    # re-import would pull in workers who were already examined and passed).
+    already_passed_ids = set()
+    if protocol.training_type_id:
+        passed_q = await db.execute(
+            select(ProtocolParticipant.user_id)
+            .join(Protocol, Protocol.id == ProtocolParticipant.protocol_id)
+            .where(
+                Protocol.training_type_id == protocol.training_type_id,
+                Protocol.id != protocol_id,
+                ProtocolParticipant.result == ParticipantResult.passed,
+                ProtocolParticipant.user_id.is_not(None),
+            )
+        )
+        already_passed_ids = {row[0] for row in passed_q.all()}
+
     # Resolve organization name from protocol → batch → org
     org_name = None
     org_id = protocol.organization_id
@@ -663,8 +680,12 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
         org_name = org.name if org else None
 
     added = []
+    skipped_already_certified = 0
     for i, user in enumerate(batch_users):
         if user.id in existing_user_ids:
+            continue
+        if user.id in already_passed_ids:
+            skipped_already_certified += 1
             continue
         position_str = user.position_raw or (user.position.name if user.position else None)
         db.add(ProtocolParticipant(
@@ -679,7 +700,12 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
 
     await db.commit()
     protocol = await _get_protocol_or_404(protocol_id, db)
-    return {"added": len(added), "names": added, "protocol": ProtocolOut.model_validate(protocol)}
+    return {
+        "added": len(added),
+        "names": added,
+        "skipped_already_certified": skipped_already_certified,
+        "protocol": ProtocolOut.model_validate(protocol),
+    }
 
 
 async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], list[str]]:
