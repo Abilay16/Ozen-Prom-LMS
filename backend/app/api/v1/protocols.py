@@ -265,7 +265,8 @@ async def list_commission_candidates(db: DB, admin: CurrentAdmin):
     )
     users = result.scalars().all()
     return [
-        {"id": u.id, "full_name": u.full_name, "login": u.login, "position_title": u.position_title}
+        {"id": u.id, "full_name": u.full_name, "login": u.login,
+         "position_title": u.position_title, "is_default_chair": u.is_default_chair}
         for u in users
     ]
 
@@ -288,7 +289,29 @@ async def create_protocol(data: ProtocolCreate, db: DB, admin: CurrentSuperAdmin
     db.add(protocol)
     await db.flush()  # get protocol.id
 
-    for i, m in enumerate(data.commission_members):
+    commission_members = data.commission_members
+    if not commission_members:
+        # No commission specified — default to the current pool of eligible
+        # members (the one flagged is_default_chair becomes chair, or the
+        # first eligible member if none is flagged). Still fully editable
+        # afterwards on the protocol's draft page — add/remove works exactly
+        # as if it had been picked by hand.
+        elig_result = await db.execute(
+            select(AdminUser)
+            .where(AdminUser.is_active == True, AdminUser.is_commission_eligible == True)  # noqa
+            .order_by(AdminUser.is_default_chair.desc(), AdminUser.full_name)
+        )
+        eligible = elig_result.scalars().all()
+        commission_members = [
+            CommissionMemberIn(
+                admin_user_id=u.id,
+                role=CommissionRole.chair if (u.is_default_chair or i == 0) else CommissionRole.member,
+                sort_order=i,
+            )
+            for i, u in enumerate(eligible)
+        ]
+
+    for i, m in enumerate(commission_members):
         full_name = m.full_name
         position_title = m.position_title
         if m.admin_user_id:

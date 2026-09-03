@@ -6,6 +6,8 @@
 
     <p class="text-sm text-gray-500 mb-4">
       Отметьте сотрудников, которые могут входить в экзаменационную комиссию, и укажите их должности для протоколов.
+      Отмеченные «В комиссии» автоматически подставляются в состав нового протокола (председатель по умолчанию —
+      председателем, остальные — членами); в самом протоколе состав можно менять как обычно.
     </p>
 
     <div v-if="isCommission" class="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-2 text-sm mb-4">
@@ -22,6 +24,7 @@
             <th class="text-left px-4 py-3">Логин</th>
             <th class="text-left px-4 py-3 min-w-[260px]">Должность для протоколов</th>
             <th class="text-center px-4 py-3">В комиссии</th>
+            <th class="text-center px-4 py-3">Председатель по умолчанию</th>
           </tr>
         </thead>
         <tbody>
@@ -48,9 +51,20 @@
                 @change="!isCommission && toggleEligible(u)"
               />
             </td>
+            <td class="px-4 py-3 text-center">
+              <input
+                type="radio"
+                name="default_chair"
+                :checked="u.is_default_chair"
+                class="w-4 h-4"
+                :class="isCommission ? 'cursor-default opacity-60' : 'cursor-pointer'"
+                :disabled="isCommission"
+                @change="!isCommission && setDefaultChair(u)"
+              />
+            </td>
           </tr>
           <tr v-if="!users.length">
-            <td colspan="4" class="text-center text-gray-400 py-8">Нет пользователей</td>
+            <td colspan="5" class="text-center text-gray-400 py-8">Нет пользователей</td>
           </tr>
         </tbody>
       </table>
@@ -91,6 +105,11 @@ async function patch(u, payload) {
 
 async function toggleEligible(u) {
   await patch(u, { is_commission_eligible: !u.is_commission_eligible })
+}
+
+async function setDefaultChair(u) {
+  await patch(u, { is_default_chair: true })
+  users.value.forEach(x => { x.is_default_chair = x.id === u.id })
 }
 
 async function savePositionTitle(u) {

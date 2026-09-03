@@ -1,5 +1,6 @@
 from uuid import UUID
 from typing import Optional
+from datetime import date
 
 from pydantic import BaseModel
 from fastapi import APIRouter
@@ -18,6 +19,9 @@ class TrainingTypeOut(BaseModel):
     name_short: str
     validity_years: int
     is_active: bool
+    default_order_number: Optional[str] = None
+    default_order_date: Optional[date] = None
+    default_legal_basis: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -35,6 +39,9 @@ class TrainingTypeUpdate(BaseModel):
     name_short: Optional[str] = None
     validity_years: Optional[int] = None
     is_active: Optional[bool] = None
+    default_order_number: Optional[str] = None
+    default_order_date: Optional[date] = None
+    default_legal_basis: Optional[str] = None
 
 
 @router.get("", response_model=list[TrainingTypeOut])

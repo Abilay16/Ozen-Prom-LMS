@@ -27,7 +27,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-xs text-gray-500 mb-1">Тип проверки знаний *</label>
-              <select v-model="form.training_type_id" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
+              <select v-model="form.training_type_id" @change="applyTrainingTypeDefaults" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
                 <option value="">— выберите —</option>
                 <option v-for="tt in trainingTypes" :key="tt.id" :value="tt.id">{{ tt.name_short }} — {{ tt.name_ru }}</option>
               </select>
@@ -413,6 +413,18 @@ onMounted(async () => {
   await loadProtocol()
   pageReady.value = true
 })
+
+// When picking a training type on a brand-new protocol, prefill order
+// number/date/legal basis from that type's defaults — only if the admin
+// hasn't already typed something in, and never on an existing protocol.
+function applyTrainingTypeDefaults() {
+  if (!isNew.value) return
+  const tt = trainingTypes.value.find(t => t.id === form.value.training_type_id)
+  if (!tt) return
+  if (!form.value.order_number && tt.default_order_number) form.value.order_number = tt.default_order_number
+  if (!form.value.order_date && tt.default_order_date) form.value.order_date = tt.default_order_date
+  if (!form.value.legal_basis && tt.default_legal_basis) form.value.legal_basis = tt.default_legal_basis
+}
 
 async function saveMainForm() {
   if (!form.value.protocol_number || !form.value.exam_date || !form.value.training_type_id) {

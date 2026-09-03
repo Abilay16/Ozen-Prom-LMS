@@ -70,6 +70,7 @@ class AdminUser(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superadmin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_commission_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_default_chair: Mapped[bool] = mapped_column(Boolean, default=False)  # auto-picked as chair on new protocols
     position_title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

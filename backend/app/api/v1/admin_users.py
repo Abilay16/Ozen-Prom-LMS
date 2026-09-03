@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
 from app.core.exceptions import ConflictError
@@ -26,6 +26,7 @@ class AdminUserOut(BaseModel):
     is_active: bool
     is_superadmin: bool
     is_commission_eligible: bool
+    is_default_chair: bool
     position_title: Optional[str]
 
     model_config = {"from_attributes": True}
@@ -35,6 +36,7 @@ class AdminUserPatch(BaseModel):
     full_name: Optional[str] = None
     position_title: Optional[str] = None
     is_commission_eligible: Optional[bool] = None
+    is_default_chair: Optional[bool] = None
 
 
 class AdminUserCreate(BaseModel):
@@ -128,6 +130,13 @@ async def patch_admin_user(
         au.position_title = data.position_title
     if data.is_commission_eligible is not None:
         au.is_commission_eligible = data.is_commission_eligible
+    if data.is_default_chair is not None:
+        if data.is_default_chair:
+            # Only one default chair at a time — unset it on everyone else.
+            await db.execute(
+                update(AdminUser).where(AdminUser.id != au.id).values(is_default_chair=False)
+            )
+        au.is_default_chair = data.is_default_chair
 
     await db.commit()
     await db.refresh(au)
