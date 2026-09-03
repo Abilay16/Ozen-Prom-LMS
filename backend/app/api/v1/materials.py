@@ -1,7 +1,7 @@
 from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
 from sqlalchemy import select
 
 from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
@@ -61,6 +61,9 @@ async def add_material(
         file_path = os.path.join(mat_dir, safe_name)
         content = await file.read()
         file_size = len(content)
+        max_bytes = settings.MAX_MATERIAL_SIZE_MB * 1024 * 1024
+        if file_size > max_bytes:
+            raise HTTPException(413, f"Файл слишком большой (макс. {settings.MAX_MATERIAL_SIZE_MB} МБ)")
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(content)
 

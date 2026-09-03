@@ -4,7 +4,7 @@
 
     <div class="mt-4 mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">{{ batch?.name || 'Загрузка...' }}</h1>
-      <span v-if="batch" :class="statusBadge(batch.status)" class="text-sm px-3 py-1 rounded-full">{{ statusLabel(batch.status) }}</span>
+      <Badge v-if="batch" :variant="statusVariant(batch.status)">{{ statusLabel(batch.status) }}</Badge>
     </div>
 
     <!-- Info: disciplines -->
@@ -66,50 +66,46 @@
     </div>
 
     <!-- Manual add user modal -->
-    <div v-if="manualModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div class="card w-full max-w-md">
-        <h2 class="font-semibold mb-4">Добавить сотрудника вручную</h2>
-
-        <div v-if="!manualResult" class="space-y-3">
-          <div>
-            <label class="text-sm font-medium text-gray-700">ФИО <span class="text-red-500">*</span></label>
-            <input v-model="manualForm.full_name" class="input-field mt-1" placeholder="Иванов Иван Иванович" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Должность</label>
-            <input v-model="manualForm.position" class="input-field mt-1" placeholder="Водитель" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Организация</label>
-            <input v-model="manualForm.organization" class="input-field mt-1" placeholder="ООО Пример" />
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button @click="addUserManually" :disabled="manualAdding" class="btn-primary disabled:opacity-50">
-              {{ manualAdding ? 'Создаём...' : 'Добавить' }}
-            </button>
-            <button @click="manualModal = false; manualResult = null" class="btn-secondary">Отмена</button>
-          </div>
+    <Modal v-model="manualModal" title="Добавить сотрудника вручную" max-width="max-w-md">
+      <div v-if="!manualResult" class="space-y-3">
+        <div>
+          <label class="text-sm font-medium text-gray-700">ФИО <span class="text-red-500">*</span></label>
+          <input v-model="manualForm.full_name" class="input-field mt-1" placeholder="Иванов Иван Иванович" />
         </div>
-
-        <div v-else class="space-y-3">
-          <div class="p-3 bg-green-50 border border-green-200 rounded text-sm">
-            <div class="font-semibold text-green-700 mb-2">✅ Пользователь создан</div>
-            <div><span class="text-gray-500">ФИО:</span> {{ manualResult.full_name }}</div>
-            <div v-if="manualResult.organization"><span class="text-gray-500">Орг:</span> {{ manualResult.organization }}</div>
-            <div v-if="manualResult.position"><span class="text-gray-500">Должность:</span> {{ manualResult.position }}</div>
-            <div class="mt-2 flex gap-4">
-              <div><span class="text-gray-500">Логин:</span> <span class="font-mono font-bold text-blue-700">{{ manualResult.login }}</span></div>
-              <div><span class="text-gray-500">Пароль:</span> <span class="font-mono font-bold text-green-700">{{ manualResult.password }}</span></div>
-            </div>
-            <div v-if="manualResult.courses" class="mt-1 text-xs text-gray-500">Курсы: {{ manualResult.courses }}</div>
-          </div>
-          <div class="flex gap-3">
-            <button @click="manualForm = { full_name: '', position: '', organization: '' }; manualResult = null" class="btn-secondary">Добавить ещё одного</button>
-            <button @click="manualModal = false; manualResult = null" class="btn-primary">Готово</button>
-          </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Должность</label>
+          <input v-model="manualForm.position" class="input-field mt-1" placeholder="Водитель" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Организация</label>
+          <input v-model="manualForm.organization" class="input-field mt-1" placeholder="ООО Пример" />
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button @click="addUserManually" :disabled="manualAdding" class="btn-primary disabled:opacity-50">
+            {{ manualAdding ? 'Создаём...' : 'Добавить' }}
+          </button>
+          <button @click="manualModal = false; manualResult = null" class="btn-secondary">Отмена</button>
         </div>
       </div>
-    </div>
+
+      <div v-else class="space-y-3">
+        <div class="p-3 bg-green-50 border border-green-200 rounded text-sm">
+          <div class="font-semibold text-green-700 mb-2">✅ Пользователь создан</div>
+          <div><span class="text-gray-500">ФИО:</span> {{ manualResult.full_name }}</div>
+          <div v-if="manualResult.organization"><span class="text-gray-500">Орг:</span> {{ manualResult.organization }}</div>
+          <div v-if="manualResult.position"><span class="text-gray-500">Должность:</span> {{ manualResult.position }}</div>
+          <div class="mt-2 flex gap-4">
+            <div><span class="text-gray-500">Логин:</span> <span class="font-mono font-bold text-blue-700">{{ manualResult.login }}</span></div>
+            <div><span class="text-gray-500">Пароль:</span> <span class="font-mono font-bold text-green-700">{{ manualResult.password }}</span></div>
+          </div>
+          <div v-if="manualResult.courses" class="mt-1 text-xs text-gray-500">Курсы: {{ manualResult.courses }}</div>
+        </div>
+        <div class="flex gap-3">
+          <button @click="manualForm = { full_name: '', position: '', organization: '' }; manualResult = null" class="btn-secondary">Добавить ещё одного</button>
+          <button @click="manualModal = false; manualResult = null" class="btn-primary">Готово</button>
+        </div>
+      </div>
+    </Modal>
 
     <!-- Step 2: Preview -->
     <div v-if="preview" class="card mb-4">
@@ -224,7 +220,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import Modal from '@/components/Modal.vue'
+import Badge from '@/components/Badge.vue'
 
+const toast = useToast()
 const route = useRoute()
 const batchId = route.params.id
 
@@ -245,7 +245,7 @@ const manualResult = ref(null)
 const manualForm = ref({ full_name: '', position: '', organization: '' })
 
 async function addUserManually() {
-  if (!manualForm.value.full_name.trim()) { alert('Введите ФИО'); return }
+  if (!manualForm.value.full_name.trim()) { toast.error('Введите ФИО'); return }
   manualAdding.value = true
   try {
     const { data } = await api.post(`/admin/batches/${batchId}/add-user`, manualForm.value)
@@ -261,7 +261,7 @@ async function addUserManually() {
       }
     } catch {}
   } catch (err) {
-    alert('Ошибка: ' + (err.response?.data?.detail || err.message))
+    toast.error(apiErrorMessage(err))
   } finally {
     manualAdding.value = false
   }
@@ -316,7 +316,7 @@ async function confirmImport() {
   try {
     const { data } = await api.post(`/admin/batches/${batchId}/confirm-import`)
     if (data.error) {
-      alert('Ошибка импорта: ' + data.error)
+      toast.error('Ошибка импорта: ' + data.error)
     } else {
       result.value = data
       const { data: b } = await api.get(`/admin/batches/${batchId}`)
@@ -334,7 +334,7 @@ async function confirmImport() {
       } catch {}
     }
   } catch (err) {
-    alert('Ошибка: ' + (err.response?.data?.detail || err.message))
+    toast.error(apiErrorMessage(err))
   }
   confirming.value = false
 }
@@ -353,17 +353,17 @@ async function downloadCredentials() {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   } catch (err) {
-    alert('Ошибка скачивания: ' + err.message)
+    toast.error('Ошибка скачивания: ' + err.message)
   }
 }
 
-function statusBadge(s) {
+function statusVariant(s) {
   return {
-    draft: 'bg-gray-100 text-gray-600',
-    processing: 'bg-yellow-100 text-yellow-700',
-    completed: 'bg-green-100 text-green-700',
-    archived: 'bg-red-100 text-red-600',
-  }[s] || 'bg-gray-100'
+    draft: 'neutral',
+    processing: 'progress',
+    completed: 'passed',
+    archived: 'failed',
+  }[s] || 'neutral'
 }
 
 function statusLabel(s) {

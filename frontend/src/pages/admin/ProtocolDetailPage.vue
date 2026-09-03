@@ -9,9 +9,7 @@
       <h1 class="text-2xl font-bold text-gray-800 flex-1">
         {{ isNew ? 'Новый протокол' : `Протокол № ${form.protocol_number}` }}
       </h1>
-      <span v-if="!isNew" class="px-2 py-1 rounded text-sm font-medium" :class="statusClass(protocol?.status)">
-        {{ statusLabel(protocol?.status) }}
-      </span>
+      <Badge v-if="!isNew" :variant="statusVariant(protocol?.status)">{{ statusLabel(protocol?.status) }}</Badge>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -26,7 +24,7 @@
         <!-- Basic info card -->
         <div class="bg-white rounded-xl shadow-sm p-5">
           <h2 class="font-semibold text-gray-700 mb-4">Основная информация</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-xs text-gray-500 mb-1">Тип проверки знаний *</label>
               <select v-model="form.training_type_id" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
@@ -57,11 +55,11 @@
               <label class="block text-xs text-gray-500 mb-1">Дата приказа</label>
               <input v-model="form.order_date" type="date" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50" />
             </div>
-            <div class="col-span-2">
+            <div class="sm:col-span-2">
               <label class="block text-xs text-gray-500 mb-1">Основание (ст. закона)</label>
               <input v-model="form.legal_basis" type="text" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50" placeholder='Напр. "на основании ст 79 РК «О Гражданской защите»"' />
             </div>
-            <div class="col-span-2">
+            <div class="sm:col-span-2">
               <label class="block text-xs text-gray-500 mb-1">Нормативные документы (каждый с новой строки)</label>
               <textarea v-model="form.regulatory_docs" rows="3" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50" />
             </div>
@@ -166,7 +164,8 @@
             Участников нет — нажмите «Загрузить из потока»
           </div>
 
-          <table v-if="protocol.participants.length > 0" class="w-full text-xs mb-3">
+          <div v-if="protocol.participants.length > 0" class="overflow-x-auto mb-3">
+          <table class="w-full text-xs">
             <thead class="bg-gray-50">
               <tr>
                 <th class="text-left px-2 py-2 font-medium text-gray-500">№</th>
@@ -204,6 +203,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
 
           <!-- Manual add (collapsed, fallback) -->
           <div v-if="protocol.status === 'draft' && !isCommission">
@@ -236,9 +236,7 @@
 
             <!-- Status badge -->
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded text-xs font-medium" :class="statusClass(protocol.status)">
-                {{ statusLabel(protocol.status) }}
-              </span>
+              <Badge :variant="statusVariant(protocol.status)">{{ statusLabel(protocol.status) }}</Badge>
             </div>
 
             <!-- Batch info -->
@@ -320,8 +318,6 @@
       </div>
     </div>
 
-    <div v-if="error" class="fixed bottom-4 right-4 bg-red-100 text-red-700 px-4 py-3 rounded-xl shadow text-sm">{{ error }}</div>
-    <div v-if="success" class="fixed bottom-4 right-4 bg-green-100 text-green-700 px-4 py-3 rounded-xl shadow text-sm">{{ success }}</div>
   </div>
 </template>
 
@@ -332,7 +328,12 @@ import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { signWithNcaLayer } from '@/services/ncaLayer'
 import SignatureStamp from '@/components/SignatureStamp.vue'
+import Badge from '@/components/Badge.vue'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
+const toast = useToast()
+const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -346,8 +347,6 @@ const batches = ref([])
 const commissionCandidates = ref([])
 const pageReady = ref(false)
 const saving = ref(false)
-const error = ref('')
-const success = ref('')
 
 const form = ref({
   training_type_id: '',
@@ -380,8 +379,8 @@ const unsignedMembersCount = computed(() =>
 )
 
 function flash(msg, type = 'success') {
-  if (type === 'success') { success.value = msg; setTimeout(() => success.value = '', 3000) }
-  else { error.value = msg; setTimeout(() => error.value = '', 4000) }
+  if (type === 'success') toast.success(msg)
+  else toast.error(msg)
 }
 
 async function loadProtocol() {
@@ -448,7 +447,8 @@ async function saveMainForm() {
 }
 
 async function setStatus(status) {
-  if (!confirm(`Архивировать протокол?`)) return
+  const ok = await confirm({ message: 'Архивировать протокол?', confirmText: 'Архивировать' })
+  if (!ok) return
   await api.patch(`/admin/protocols/${route.params.id}`, { status })
   await loadProtocol()
   flash('Протокол архивирован')
@@ -458,12 +458,17 @@ async function deleteProtocol() {
   const warning = issuedCount.value > 0
     ? `\n\nВНИМАНИЕ: будут безвозвратно удалены ${issuedCount.value} выданных удостоверений, связанных с этим протоколом.`
     : ''
-  if (!confirm(`Удалить протокол № ${protocol.value.protocol_number} безвозвратно?${warning}`)) return
+  const ok = await confirm({
+    message: `Удалить протокол № ${protocol.value.protocol_number} безвозвратно?${warning}`,
+    danger: true,
+    confirmText: 'Удалить',
+  })
+  if (!ok) return
   try {
     await api.delete(`/admin/protocols/${route.params.id}`)
     router.push('/admin/protocols')
   } catch (e) {
-    flash(e.response?.data?.detail ?? 'Ошибка удаления', 'error')
+    flash(apiErrorMessage(e, 'Ошибка удаления'), 'error')
   }
 }
 
@@ -487,7 +492,8 @@ async function addParticipant() {
 }
 
 async function removeParticipant(id) {
-  if (!confirm('Удалить участника?')) return
+  const ok = await confirm({ message: 'Удалить участника?', danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   await api.delete(`/admin/protocols/${route.params.id}/participants/${id}`)
   await loadProtocol()
 }
@@ -506,20 +512,21 @@ async function importFromBatch() {
     const skippedNote = skipped > 0 ? ` (пропущено ${skipped} уже аттестованных по этому виду проверки)` : ''
     flash(`Загружено: ${res.data.added} участников из потока${skippedNote}`)
   } catch (e) {
-    flash(e.response?.data?.detail ?? 'Ошибка импорта', 'error')
+    flash(apiErrorMessage(e, 'Ошибка импорта'), 'error')
   } finally {
     importing.value = false
   }
 }
 
 async function issueCertificates() {
-  if (!confirm('Выдать удостоверения всем участникам, сдавшим экзамен?')) return
+  const ok = await confirm({ message: 'Выдать удостоверения всем участникам, сдавшим экзамен?', confirmText: 'Выдать' })
+  if (!ok) return
   try {
     const res = await api.post(`/admin/protocols/${route.params.id}/issue-certificates`)
     flash(`Выдано: ${res.data.issued.length} удостоверений`)
     await loadProtocol()
   } catch (e) {
-    flash(e.response?.data?.detail ?? 'Ошибка', 'error')
+    flash(apiErrorMessage(e), 'error')
   }
 }
 
@@ -532,23 +539,24 @@ function statusLabel(s) {
   }[s] ?? s
 }
 
-function statusClass(s) {
+function statusVariant(s) {
   return {
-    draft: 'bg-yellow-100 text-yellow-700',
-    awaiting_signatures: 'bg-blue-100 text-blue-700',
-    signed: 'bg-green-100 text-green-700',
-    archived: 'bg-gray-100 text-gray-600',
-  }[s] ?? 'bg-gray-100 text-gray-600'
+    draft: 'progress',
+    awaiting_signatures: 'assigned',
+    signed: 'passed',
+    archived: 'neutral',
+  }[s] ?? 'neutral'
 }
 
 async function requestSignatures() {
-  if (!confirm('Отправить протокол на подпись членам комиссии?')) return
+  const ok = await confirm({ message: 'Отправить протокол на подпись членам комиссии?', confirmText: 'Отправить' })
+  if (!ok) return
   try {
     const res = await api.post(`/admin/protocols/${route.params.id}/request-signatures`)
     protocol.value = res.data
     flash('Протокол отправлен на подпись')
   } catch (e) {
-    flash(e.response?.data?.detail ?? 'Ошибка', 'error')
+    flash(apiErrorMessage(e), 'error')
   }
 }
 
@@ -557,7 +565,8 @@ async function signProtocol() {
   const msg = isChair
     ? 'Подписать протокол (председатель)? Это завершит процесс подписания.'
     : 'Подтвердить свою подпись под протоколом?'
-  if (!confirm(msg)) return
+  const ok = await confirm({ message: msg, confirmText: 'Подписать' })
+  if (!ok) return
 
   let cms = null
   try {
@@ -569,7 +578,10 @@ async function signProtocol() {
     cms = await signWithNcaLayer(payloadStr)
   } catch (ncaErr) {
     // EDS is mandatory — signing without NCALayer is not allowed
-    alert(`Ошибка ЭЦП: ${ncaErr.message}\n\nПодписание без ЭЦП невозможно. Убедитесь, что NCALayer запущен, и попробуйте снова.`)
+    toast.error(
+      `Ошибка ЭЦП: ${ncaErr.message}\n\nПодписание без ЭЦП невозможно. Убедитесь, что NCALayer запущен, и попробуйте снова.`,
+      10000,
+    )
     return
   }
 
@@ -579,7 +591,7 @@ async function signProtocol() {
     protocol.value = res.data
     flash(isChair ? 'Протокол подписан!' : 'Ваша подпись зафиксирована')
   } catch (e) {
-    flash(e.response?.data?.detail ?? 'Ошибка', 'error')
+    flash(apiErrorMessage(e), 'error')
   }
 }
 

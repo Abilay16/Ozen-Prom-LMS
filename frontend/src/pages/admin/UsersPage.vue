@@ -7,9 +7,15 @@
     <div class="card">
       <div class="flex gap-4 mb-4">
         <input v-model="search" type="text" placeholder="Поиск по ФИО..." class="input-field max-w-xs" />
+        <select v-model="statusFilter" class="input-field max-w-[180px]">
+          <option value="active">Активные</option>
+          <option value="inactive">Неактивные</option>
+          <option value="all">Все</option>
+        </select>
       </div>
       <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
-      <table v-else class="w-full text-sm">
+      <div v-else class="overflow-x-auto">
+      <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-gray-200 text-left">
             <th class="py-3 px-2 font-semibold text-gray-600">Фото</th>
@@ -39,24 +45,29 @@
             <td class="py-3 px-2 text-gray-500">{{ u.position_raw || '—' }}</td>
             <td class="py-3 px-2 text-gray-500">{{ orgName(u.organization_id) }}</td>
             <td class="py-3 px-2">
-              <span :class="u.is_active ? 'badge-passed' : 'badge-failed'">
+              <Badge :variant="u.is_active ? 'passed' : 'failed'">
                 {{ u.is_active ? 'Активен' : 'Неактивен' }}
-              </span>
+              </Badge>
             </td>
             <td class="py-3 px-2">
               <button @click="openEdit(u)" class="text-xs text-blue-600 hover:underline">Изменить</button>
-              <button @click="deleteUser(u)" class="text-xs text-red-400 hover:text-red-600 hover:underline ml-2">Удалить</button>
+              <button v-if="!u.is_active" @click="reactivateUser(u)" class="text-xs text-green-600 hover:underline ml-2">Активировать</button>
+              <button @click="deleteUser(u)" class="text-xs text-red-400 hover:text-red-600 hover:underline ml-2">Удалить навсегда</button>
+            </td>
+          </tr>
+          <tr v-if="!users.length">
+            <td colspan="8" class="text-center text-gray-400 py-10">
+              {{ search ? 'Никого не найдено по этому запросу.' : 'Нет пользователей. Добавьте первого.' }}
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <!-- Create / Edit modal -->
-    <div v-if="modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg space-y-4">
-        <h2 class="text-lg font-bold">{{ editing ? 'Изменить пользователя' : 'Новый пользователь' }}</h2>
-
+    <Modal v-model="modal" :title="editing ? 'Изменить пользователя' : 'Новый пользователь'">
+      <div class="space-y-4">
         <!-- Photo upload (edit only) -->
         <div v-if="editing" class="flex items-center gap-4">
           <div class="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
@@ -69,8 +80,8 @@
             <p v-if="photoError" class="text-xs text-red-500 mt-1">{{ photoError }}</p>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div class="col-span-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
             <label class="text-sm font-medium text-gray-700">ФИО <span class="text-red-400">*</span></label>
             <input v-model="form.full_name" class="input-field mt-1" placeholder="Иванов Иван Иванович" />
           </div>
@@ -107,25 +118,33 @@
           <input type="checkbox" v-model="form.is_active" id="is_active" />
           <label for="is_active" class="text-sm text-gray-700">Активен</label>
         </div>
-        <div class="flex gap-3 pt-2">
-          <button @click="save" :disabled="saving || !form.full_name" class="btn-primary flex-1">
-            {{ saving ? 'Сохраняю...' : 'Сохранить' }}
-          </button>
-          <button @click="modal = false" class="btn-secondary flex-1">Отмена</button>
-        </div>
       </div>
-    </div>
+      <template #footer>
+        <button @click="save" :disabled="saving || !form.full_name" class="btn-primary flex-1">
+          {{ saving ? 'Сохраняю...' : 'Сохранить' }}
+        </button>
+        <button @click="modal = false" class="btn-secondary flex-1">Отмена</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import Modal from '@/components/Modal.vue'
+import Badge from '@/components/Badge.vue'
+import { useConfirm } from '@/composables/useConfirm'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const users = ref([])
 const orgs = ref([])
 const loading = ref(true)
 const search = ref('')
+const statusFilter = ref('active')
 const modal = ref(false)
 const saving = ref(false)
 const editing = ref(null)
@@ -141,8 +160,9 @@ function orgName(id) {
 async function load() {
   loading.value = true
   try {
+    const isActiveParam = statusFilter.value === 'all' ? undefined : statusFilter.value === 'active'
     const [usersRes, orgsRes] = await Promise.all([
-      api.get('/admin/users', { params: { search: search.value || undefined, is_active: true, limit: 500 } }),
+      api.get('/admin/users', { params: { search: search.value || undefined, is_active: isActiveParam, limit: 500 } }),
       api.get('/admin/organizations'),
     ])
     users.value = usersRes.data
@@ -208,16 +228,17 @@ async function save() {
         is_commission_eligible: form.value.role === 'commission',
       }
       await api.post('/admin/admin-users', payload)
-      alert(`Администратор создан. Логин: ${form.value.login || '(см. в базе)'}`)
+      toast.success(`Администратор создан. Логин: ${form.value.login || '(см. в базе)'}`)
     }
     modal.value = false
   } catch (e) {
-    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+    toast.error(apiErrorMessage(e))
   } finally { saving.value = false }
 }
 
 onMounted(load)
 watch(search, () => setTimeout(load, 300))
+watch(statusFilter, load)
 
 async function handlePhotoFile(event) {
   const file = event.target.files?.[0]
@@ -239,13 +260,33 @@ async function handlePhotoFile(event) {
     editing.value.photo_url = data.photo_url
     photoTs.value = Date.now()
   } catch (e) {
-    photoError.value = 'Ошибка загрузки: ' + (e.response?.data?.detail || e.message)
+    photoError.value = 'Ошибка загрузки: ' + apiErrorMessage(e)
   }
 }
 
 async function deleteUser(u) {
-  if (!confirm(`Удалить пользователя «${u.full_name}»?`)) return
-  await api.delete(`/admin/users/${u.id}`)
-  await load()
+  const ok = await confirm({
+    message: `Удалить пользователя «${u.full_name}» навсегда? Логин, пароль и назначенные курсы будут стёрты безвозвратно. Уже выданные удостоверения и протоколы сохранятся.`,
+    danger: true,
+    confirmText: 'Удалить навсегда',
+  })
+  if (!ok) return
+  try {
+    await api.delete(`/admin/users/${u.id}`)
+    await load()
+    toast.success('Пользователь удалён')
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  }
+}
+
+async function reactivateUser(u) {
+  try {
+    await api.patch(`/admin/users/${u.id}`, { is_active: true })
+    await load()
+    toast.success('Пользователь снова активен')
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  }
 }
 </script>

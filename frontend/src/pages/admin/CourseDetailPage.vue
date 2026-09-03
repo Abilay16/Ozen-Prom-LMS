@@ -15,52 +15,49 @@
         </div>
 
         <!-- Add material modal -->
-        <div v-if="materialModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div class="card w-full max-w-md">
-            <h2 class="font-semibold mb-4">Новый материал</h2>
-            <div class="space-y-3">
-              <div>
-                <label class="text-sm font-medium text-gray-700">Заголовок</label>
-                <input v-model="matForm.title" class="input-field mt-1" />
-              </div>
-              <div>
-                <label class="text-sm font-medium text-gray-700">Тип</label>
-                <select v-model="matForm.material_type" class="input-field mt-1">
-                  <option value="pdf">PDF документ</option>
-                  <option value="video_url">Видео (URL / YouTube)</option>
-                  <option value="video_file">Видео (файл)</option>
-                  <option value="docx">Презентация / Word</option>
-                  <option value="image">Изображение</option>
-                  <option value="external_link">Внешняя ссылка</option>
-                </select>
-              </div>
-              <div v-if="matForm.material_type === 'video_url' || matForm.material_type === 'external_link'">
-                <label class="text-sm font-medium text-gray-700">{{ matForm.material_type === 'video_url' ? 'URL видео (YouTube, Vimeo...)' : 'URL ссылки' }}</label>
-                <input v-model="matForm.url" class="input-field mt-1" placeholder="https://..." />
-              </div>
-              <div v-else>
-                <label class="text-sm font-medium text-gray-700">Файл</label>
-                <input ref="matFileInput" type="file" @change="e => matFile = e.target.files[0]" class="input-field mt-1" />
-              </div>
+        <Modal v-model="materialModal" title="Новый материал" max-width="max-w-md">
+          <div class="space-y-3">
+            <div>
+              <label class="text-sm font-medium text-gray-700">Заголовок</label>
+              <input v-model="matForm.title" class="input-field mt-1" />
             </div>
-            <!-- Upload progress -->
-            <div v-if="uploading" class="mt-3">
-              <div class="flex justify-between text-xs text-gray-500 mb-1">
-                <span>Загрузка файла...</span>
-                <span>{{ uploadProgress }}%</span>
-              </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
-                <div class="bg-blue-600 h-2 rounded-full transition-all duration-200" :style="{ width: uploadProgress + '%' }"></div>
-              </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700">Тип</label>
+              <select v-model="matForm.material_type" class="input-field mt-1">
+                <option value="pdf">PDF документ</option>
+                <option value="video_url">Видео (URL / YouTube)</option>
+                <option value="video_file">Видео (файл)</option>
+                <option value="docx">Презентация / Word</option>
+                <option value="image">Изображение</option>
+                <option value="external_link">Внешняя ссылка</option>
+              </select>
             </div>
-            <div class="flex gap-3 mt-4">
-              <button @click="uploadMaterial" :disabled="uploading" class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                {{ uploading ? 'Загрузка...' : 'Загрузить' }}
-              </button>
-              <button @click="materialModal = false" :disabled="uploading" class="btn-secondary disabled:opacity-50">Отмена</button>
+            <div v-if="matForm.material_type === 'video_url' || matForm.material_type === 'external_link'">
+              <label class="text-sm font-medium text-gray-700">{{ matForm.material_type === 'video_url' ? 'URL видео (YouTube, Vimeo...)' : 'URL ссылки' }}</label>
+              <input v-model="matForm.url" class="input-field mt-1" placeholder="https://..." />
+            </div>
+            <div v-else>
+              <label class="text-sm font-medium text-gray-700">Файл</label>
+              <input ref="matFileInput" type="file" @change="e => matFile = e.target.files[0]" class="input-field mt-1" />
             </div>
           </div>
-        </div>
+          <!-- Upload progress -->
+          <div v-if="uploading" class="mt-3">
+            <div class="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Загрузка файла...</span>
+              <span>{{ uploadProgress }}%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="bg-blue-600 h-2 rounded-full transition-all duration-200" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+          </div>
+          <template #footer>
+            <button @click="uploadMaterial" :disabled="uploading" class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+              {{ uploading ? 'Загрузка...' : 'Загрузить' }}
+            </button>
+            <button @click="materialModal = false" :disabled="uploading" class="btn-secondary disabled:opacity-50">Отмена</button>
+          </template>
+        </Modal>
 
         <ul class="space-y-2">
           <li v-for="m in materials" :key="m.id" class="flex items-center justify-between p-2 rounded bg-gray-50">
@@ -113,56 +110,50 @@
           </div>
 
           <!-- Add question modal -->
-          <div v-if="questionModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div class="card w-full max-w-lg">
-              <h2 class="font-semibold mb-4">Новый вопрос</h2>
-              <div class="space-y-3">
-                <div>
-                  <label class="text-sm font-medium text-gray-700">Текст вопроса</label>
-                  <textarea v-model="qForm.text" rows="2" class="input-field mt-1"></textarea>
-                </div>
-                <div v-for="(opt, i) in qForm.options" :key="i" class="flex gap-2 items-center">
-                  <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
-                  <label class="flex items-center gap-1 text-xs whitespace-nowrap">
-                    <input type="radio" :name="'correct'" :value="i" v-model="qForm.correctIndex" />
-                    Верный
-                  </label>
-                  <button v-if="qForm.options.length > 2" @click="qForm.options.splice(i,1); if(qForm.correctIndex>=qForm.options.length) qForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
-                </div>
-                <button @click="qForm.options.push({ text: '', is_correct: false })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
+          <Modal v-model="questionModal" title="Новый вопрос">
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-gray-700">Текст вопроса</label>
+                <textarea v-model="qForm.text" rows="2" class="input-field mt-1"></textarea>
               </div>
-              <div class="flex gap-3 mt-4">
-                <button @click="addQuestion" class="btn-primary">Добавить</button>
-                <button @click="questionModal = false" class="btn-secondary">Отмена</button>
+              <div v-for="(opt, i) in qForm.options" :key="i" class="flex gap-2 items-center">
+                <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
+                <label class="flex items-center gap-1 text-xs whitespace-nowrap">
+                  <input type="radio" :name="'correct'" :value="i" v-model="qForm.correctIndex" />
+                  Верный
+                </label>
+                <button v-if="qForm.options.length > 2" @click="qForm.options.splice(i,1); if(qForm.correctIndex>=qForm.options.length) qForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
               </div>
+              <button @click="qForm.options.push({ text: '', is_correct: false })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
             </div>
-          </div>
+            <template #footer>
+              <button @click="addQuestion" class="btn-primary">Добавить</button>
+              <button @click="questionModal = false" class="btn-secondary">Отмена</button>
+            </template>
+          </Modal>
 
           <!-- Edit question modal -->
-          <div v-if="editModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div class="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <h2 class="font-semibold mb-4">Редактировать вопрос</h2>
-              <div class="space-y-3">
-                <div>
-                  <label class="text-sm font-medium text-gray-700">Текст вопроса</label>
-                  <textarea v-model="editForm.text" rows="2" class="input-field mt-1"></textarea>
-                </div>
-                <div v-for="(opt, i) in editForm.options" :key="i" class="flex gap-2 items-center">
-                  <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
-                  <label class="flex items-center gap-1 text-xs whitespace-nowrap">
-                    <input type="radio" name="editCorrect" :value="i" v-model="editForm.correctIndex" />
-                    Верный
-                  </label>
-                  <button v-if="editForm.options.length > 2" @click="editForm.options.splice(i,1); if(editForm.correctIndex>=editForm.options.length) editForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
-                </div>
-                <button @click="editForm.options.push({ text: '' })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
+          <Modal v-model="editModal" title="Редактировать вопрос">
+            <div class="space-y-3">
+              <div>
+                <label class="text-sm font-medium text-gray-700">Текст вопроса</label>
+                <textarea v-model="editForm.text" rows="2" class="input-field mt-1"></textarea>
               </div>
-              <div class="flex gap-3 mt-4">
-                <button @click="saveEdit" class="btn-primary">Сохранить</button>
-                <button @click="editModal = false" class="btn-secondary">Отмена</button>
+              <div v-for="(opt, i) in editForm.options" :key="i" class="flex gap-2 items-center">
+                <input v-model="opt.text" class="input-field flex-1" :placeholder="`Вариант ${i+1}`" />
+                <label class="flex items-center gap-1 text-xs whitespace-nowrap">
+                  <input type="radio" name="editCorrect" :value="i" v-model="editForm.correctIndex" />
+                  Верный
+                </label>
+                <button v-if="editForm.options.length > 2" @click="editForm.options.splice(i,1); if(editForm.correctIndex>=editForm.options.length) editForm.correctIndex=0" class="text-xs text-red-400 hover:text-red-600">✕</button>
               </div>
+              <button @click="editForm.options.push({ text: '' })" class="text-xs text-blue-600 hover:underline">+ Вариант</button>
             </div>
-          </div>
+            <template #footer>
+              <button @click="saveEdit" class="btn-primary">Сохранить</button>
+              <button @click="editModal = false" class="btn-secondary">Отмена</button>
+            </template>
+          </Modal>
 
           <ul class="space-y-2">
             <li v-for="(q, i) in test.questions" :key="q.id" class="text-sm p-3 bg-gray-50 rounded border border-gray-100">
@@ -191,6 +182,12 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import Modal from '@/components/Modal.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const route = useRoute()
 const courseId = route.params.id
@@ -229,12 +226,12 @@ function openEdit(q) {
 }
 
 async function saveEdit() {
-  if (!editForm.value.text.trim()) { alert('Введите текст вопроса'); return }
+  if (!editForm.value.text.trim()) { toast.error('Введите текст вопроса'); return }
   const opts = editForm.value.options.filter(o => o.text.trim())
-  if (opts.length < 2) { alert('Нужно минимум 2 варианта ответа'); return }
+  if (opts.length < 2) { toast.error('Нужно минимум 2 варианта ответа'); return }
   const ci = editForm.value.correctIndex
   if (ci < 0 || ci >= editForm.value.options.length || !editForm.value.options[ci]?.text.trim()) {
-    alert('Выберите верный ответ'); return
+    toast.error('Выберите верный ответ'); return
   }
   const payload = {
     text: editForm.value.text.trim(),
@@ -260,10 +257,10 @@ onMounted(async () => {
 })
 
 async function uploadMaterial() {
-  if (!matForm.value.title.trim()) { alert('Введите заголовок'); return }
+  if (!matForm.value.title.trim()) { toast.error('Введите заголовок'); return }
   const needsFile = !['video_url', 'external_link'].includes(matForm.value.material_type)
-  if (needsFile && !matFile.value) { alert('Выберите файл'); return }
-  if (!needsFile && !matForm.value.url.trim()) { alert('Введите URL'); return }
+  if (needsFile && !matFile.value) { toast.error('Выберите файл'); return }
+  if (!needsFile && !matForm.value.url.trim()) { toast.error('Введите URL'); return }
   const fd = new FormData()
   fd.append('title', matForm.value.title)
   fd.append('material_type', matForm.value.material_type)
@@ -285,7 +282,7 @@ async function uploadMaterial() {
     const { data } = await api.get(`/admin/courses/${courseId}/materials`)
     materials.value = data
   } catch (e) {
-    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+    toast.error(apiErrorMessage(e))
   } finally {
     uploading.value = false
     uploadProgress.value = 0
@@ -293,10 +290,12 @@ async function uploadMaterial() {
 }
 
 async function deleteMaterial(id) {
-  if (!confirm('Удалить материал?')) return
+  const ok = await confirm({ message: 'Удалить материал?', danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   await api.delete(`/admin/materials/${id}`)
   const { data } = await api.get(`/admin/courses/${courseId}/materials`)
   materials.value = data
+  toast.success('Материал удалён')
 }
 
 async function createTest() {
@@ -321,17 +320,17 @@ async function importFromWord(e) {
     )
     test.value = data.test
     wordWarnings.value = data.warnings || []
-    alert(`Импортировано вопросов: ${data.imported}`)
+    toast.success(`Импортировано вопросов: ${data.imported}`)
   } catch (err) {
-    alert('Ошибка импорта: ' + (err.response?.data?.detail || err.message))
+    toast.error('Ошибка импорта: ' + apiErrorMessage(err))
   }
   e.target.value = ''
 }
 
 async function addQuestion() {
-  if (!qForm.value.text.trim()) { alert('Введите текст вопроса'); return }
+  if (!qForm.value.text.trim()) { toast.error('Введите текст вопроса'); return }
   const opts = qForm.value.options.filter(o => o.text.trim())
-  if (opts.length < 2) { alert('Нужно минимум 2 варианта ответа'); return }
+  if (opts.length < 2) { toast.error('Нужно минимум 2 варианта ответа'); return }
   // Apply correct answer from radio selection
   const payload = {
     text: qForm.value.text,
@@ -339,7 +338,7 @@ async function addQuestion() {
       .map((o, i) => ({ text: o.text.trim(), is_correct: i === qForm.value.correctIndex, sort_order: i }))
       .filter(o => o.text)
   }
-  if (!payload.options.some(o => o.is_correct)) { alert('Выберите верный ответ'); return }
+  if (!payload.options.some(o => o.is_correct)) { toast.error('Выберите верный ответ'); return }
   await api.post(`/admin/tests/${test.value.id}/questions`, payload)
   const { data } = await api.get(`/admin/courses/${courseId}/test`)
   test.value = data
@@ -348,7 +347,8 @@ async function addQuestion() {
 }
 
 async function deleteQuestion(questionId) {
-  if (!confirm('Удалить вопрос?')) return
+  const ok = await confirm({ message: 'Удалить вопрос?', danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   await api.delete(`/admin/tests/questions/${questionId}`)
   const { data } = await api.get(`/admin/courses/${courseId}/test`)
   test.value = data

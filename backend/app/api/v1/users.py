@@ -174,11 +174,16 @@ async def update_user(user_id: UUID, data: UpdateUserRequest, db: DB, admin: Cur
 
 @router.delete("/{user_id}", status_code=204)
 async def delete_user(user_id: UUID, db: DB, admin: CurrentAdmin):
+    """Permanently removes the account (login/password, course assignments,
+    test attempts, uploaded documents). Certificates, protocol participation
+    and medical exam records are kept for the historical/legal record — they
+    just lose their link to a user account (see ondelete=SET NULL on those
+    tables' user_id column)."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise NotFoundError("User not found")
-    user.is_active = False
+    await db.delete(user)
 
 
 @router.post("/{user_id}/reset-password")

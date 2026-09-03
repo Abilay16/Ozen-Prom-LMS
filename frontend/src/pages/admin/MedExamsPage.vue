@@ -84,7 +84,7 @@
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
@@ -116,12 +116,9 @@
             <td class="px-4 py-3 text-gray-600 max-w-[140px] truncate" :title="r.icd10_group">{{ r.icd10_group ?? '—' }}</td>
             <td class="px-4 py-3 text-gray-600">{{ formatDate(r.exam_date) }}</td>
             <td class="px-4 py-3">
-              <span
-                class="px-2 py-0.5 rounded text-xs font-medium"
-                :class="r.fit_for_work === true ? 'bg-green-100 text-green-700' : r.fit_for_work === false ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'"
-              >
+              <Badge :variant="r.fit_for_work === true ? 'passed' : r.fit_for_work === false ? 'failed' : 'neutral'">
                 {{ r.fit_for_work === true ? 'Годен' : r.fit_for_work === false ? 'Не годен' : '—' }}
-              </span>
+              </Badge>
             </td>
             <td class="px-4 py-3">
               <div v-if="r.user_id" class="flex items-center gap-1.5">
@@ -146,49 +143,40 @@
     </div>
 
     <!-- Assign user modal -->
-    <Teleport to="body">
-      <div
-        v-if="assignModal"
-        class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-        @click.self="assignModal = null"
-      >
-        <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-          <h3 class="text-base font-semibold text-gray-800 mb-1">Привязать к пользователю</h3>
-          <div class="text-sm text-gray-500 mb-4">
-            ФИО из файла: <span class="font-medium text-gray-800">{{ assignModal.full_name }}</span>
-          </div>
-          <div class="space-y-2">
-            <input
-              v-model="assignSearch"
-              placeholder="Поиск пользователя по ФИО..."
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <select
-              v-model="assignSelectedUserId"
-              size="7"
-              class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">— выберите пользователя —</option>
-              <option v-for="u in assignFilteredUsers" :key="u.id" :value="u.id">
-                {{ u.full_name }}
-              </option>
-            </select>
-          </div>
-          <div v-if="allUsersLoading" class="text-xs text-gray-400 mt-2">Загрузка пользователей...</div>
-          <div class="flex gap-3 mt-4">
-            <button
-              @click="doAssign"
-              :disabled="!assignSelectedUserId || assignSaving"
-              class="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >{{ assignSaving ? 'Сохранение...' : 'Привязать' }}</button>
-            <button
-              @click="assignModal = null"
-              class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-            >Отмена</button>
-          </div>
-        </div>
+    <Modal :model-value="!!assignModal" @update:model-value="assignModal = null" title="Привязать к пользователю" max-width="max-w-md">
+      <div class="text-sm text-gray-500 mb-4">
+        ФИО из файла: <span class="font-medium text-gray-800">{{ assignModal?.full_name }}</span>
       </div>
-    </Teleport>
+      <div class="space-y-2">
+        <input
+          v-model="assignSearch"
+          placeholder="Поиск пользователя по ФИО..."
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          v-model="assignSelectedUserId"
+          size="7"
+          class="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">— выберите пользователя —</option>
+          <option v-for="u in assignFilteredUsers" :key="u.id" :value="u.id">
+            {{ u.full_name }}
+          </option>
+        </select>
+      </div>
+      <div v-if="allUsersLoading" class="text-xs text-gray-400 mt-2">Загрузка пользователей...</div>
+      <template #footer>
+        <button
+          @click="doAssign"
+          :disabled="!assignSelectedUserId || assignSaving"
+          class="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >{{ assignSaving ? 'Сохранение...' : 'Привязать' }}</button>
+        <button
+          @click="assignModal = null"
+          class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+        >Отмена</button>
+      </template>
+    </Modal>
 
     <!-- Pagination -->
     <div v-if="total > pageSize" class="flex justify-center mt-4 gap-2">
@@ -206,6 +194,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import Modal from '@/components/Modal.vue'
+import Badge from '@/components/Badge.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const records = ref([])
 const orgs = ref([])
@@ -328,20 +323,22 @@ async function doAssign() {
     if (rec) rec.user_id = assignSelectedUserId.value
     assignModal.value = null
   } catch (e) {
-    alert(e.response?.data?.detail ?? 'Ошибка привязки')
+    toast.error(apiErrorMessage(e, 'Ошибка привязки'))
   } finally {
     assignSaving.value = false
   }
 }
 
 async function deleteRecord(id) {
-  if (!confirm('Удалить запись медосмотра?')) return
+  const ok = await confirm({ message: 'Удалить запись медосмотра?', danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   try {
     await api.delete(`/admin/medical-exams/${id}`)
     records.value = records.value.filter(r => r.id !== id)
     total.value = Math.max(0, total.value - 1)
+    toast.success('Запись удалена')
   } catch {
-    alert('Ошибка удаления')
+    toast.error('Ошибка удаления')
   }
 }
 

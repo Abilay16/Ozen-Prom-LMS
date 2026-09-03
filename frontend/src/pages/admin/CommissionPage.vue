@@ -12,9 +12,9 @@
       ℹ️ Вы просматриваете состав комиссии в режиме чтения.
     </div>
 
-    <div v-if="error" class="bg-red-50 text-red-700 px-4 py-2 rounded mb-4 text-sm">{{ error }}</div>
+    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
 
-    <div class="card overflow-x-auto">
+    <div v-else class="card overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-brand-dark text-white">
           <tr>
@@ -55,28 +55,27 @@
         </tbody>
       </table>
     </div>
-
-    <div v-if="saved" class="fixed bottom-6 right-6 bg-green-600 text-white px-5 py-2 rounded shadow-lg text-sm">
-      Сохранено ✓
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
 
+const toast = useToast()
 const isCommission = localStorage.getItem('is_commission') === '1'
 const users = ref([])
-const error = ref('')
-const saved = ref(false)
+const loading = ref(true)
 
 onMounted(async () => {
   try {
     const { data } = await api.get('/admin/admin-users')
     users.value = data.map(u => ({ ...u, _positionDraft: u.position_title || '' }))
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Ошибка загрузки'
+    toast.error(apiErrorMessage(e, 'Ошибка загрузки'))
+  } finally {
+    loading.value = false
   }
 })
 
@@ -84,9 +83,9 @@ async function patch(u, payload) {
   try {
     const { data } = await api.patch(`/admin/admin-users/${u.id}`, payload)
     Object.assign(u, data, { _positionDraft: data.position_title || '' })
-    flashSaved()
+    toast.success('Сохранено')
   } catch (e) {
-    error.value = e.response?.data?.detail || 'Ошибка сохранения'
+    toast.error(apiErrorMessage(e, 'Ошибка сохранения'))
   }
 }
 
@@ -98,12 +97,5 @@ async function savePositionTitle(u) {
   const title = u._positionDraft.trim() || null
   if (title === (u.position_title || null)) return
   await patch(u, { position_title: title })
-}
-
-let savedTimer = null
-function flashSaved() {
-  saved.value = true
-  clearTimeout(savedTimer)
-  savedTimer = setTimeout(() => { saved.value = false }, 2000)
 }
 </script>

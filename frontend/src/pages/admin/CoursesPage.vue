@@ -11,46 +11,54 @@
         <option value="">Все дисциплины</option>
         <option v-for="d in disciplines" :key="d.id" :value="d.id">{{ d.name }}</option>
       </select>
+      <input v-model="search" type="text" placeholder="Поиск по названию..." class="input-field max-w-xs" />
     </div>
 
-    <!-- Modal -->
-    <div v-if="modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div class="card w-full max-w-lg">
-        <h2 class="font-semibold text-lg mb-4">{{ editing ? 'Редактировать курс' : 'Новый курс' }}</h2>
-        <div class="space-y-3">
-          <div>
-            <label class="text-sm font-medium text-gray-700">Дисциплина</label>
-            <select v-model="form.discipline_id" class="input-field mt-1">
-              <option value="">— Выберите —</option>
-              <option v-for="d in disciplines" :key="d.id" :value="d.id">{{ d.name }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Название курса</label>
-            <input v-model="form.name" class="input-field mt-1" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Описание</label>
-            <textarea v-model="form.description" rows="3" class="input-field mt-1"></textarea>
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Длительность (ч)</label>
-            <input v-model.number="form.duration_hours" type="number" class="input-field mt-1" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Целевые должности</label>
-            <input v-model="form.target_positions" class="input-field mt-1" placeholder="водитель, слесарь, электрик (через запятую)" />
-            <p class="text-xs text-gray-400 mt-1">Если поставить пустым — курс достанется всем, кому не подошёл другой курс</p>
-          </div>
+    <Modal v-model="modal" :title="editing ? 'Редактировать курс' : 'Новый курс'">
+      <div class="space-y-3">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Дисциплина</label>
+          <select v-model="form.discipline_id" class="input-field mt-1">
+            <option value="">— Выберите —</option>
+            <option v-for="d in disciplines" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
         </div>
-        <div class="flex gap-3 mt-4">
-          <button @click="save" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
-          <button @click="modal = false" class="btn-secondary">Отмена</button>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Название курса</label>
+          <input v-model="form.name" class="input-field mt-1" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Описание</label>
+          <textarea v-model="form.description" rows="3" class="input-field mt-1"></textarea>
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Длительность (ч)</label>
+          <input v-model.number="form.duration_hours" type="number" class="input-field mt-1" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Целевые должности</label>
+          <input v-model="form.target_positions" class="input-field mt-1" placeholder="водитель, слесарь, электрик (через запятую)" />
+          <p class="text-xs text-gray-400 mt-1">Если поставить пустым — курс достанется всем, кому не подошёл другой курс</p>
         </div>
       </div>
+      <template #footer>
+        <button @click="save" :disabled="saving" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
+        <button @click="modal = false" class="btn-secondary">Отмена</button>
+      </template>
+    </Modal>
+
+    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+
+    <div v-else-if="!courses.length" class="text-center py-16 text-gray-400">
+      <div class="text-4xl mb-2">📚</div>
+      <div>{{ filterDisc ? 'Нет курсов по выбранной дисциплине.' : 'Нет курсов. Добавьте первый курс.' }}</div>
     </div>
 
-    <div class="card overflow-x-auto">
+    <div v-else-if="!filteredCourses.length" class="text-center py-16 text-gray-400">
+      Ничего не найдено по этому запросу.
+    </div>
+
+    <div v-else class="card overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-brand-dark text-white">
           <tr>
@@ -61,7 +69,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="c in courses" :key="c.id" class="border-b hover:bg-gray-50">
+          <tr v-for="c in filteredCourses" :key="c.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-3 font-medium">
               {{ c.name }}
               <div v-if="c.target_positions" class="text-xs text-blue-500 mt-0.5">Должн.: {{ c.target_positions }}</div>
@@ -80,21 +88,40 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import Modal from '@/components/Modal.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const courses = ref([])
 const disciplines = ref([])
 const filterDisc = ref('')
+const search = ref('')
 const modal = ref(false)
 const editing = ref(null)
+const loading = ref(true)
+const saving = ref(false)
 const form = ref({ discipline_id: '', name: '', description: '', duration_hours: 8 })
 
+const filteredCourses = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return courses.value
+  return courses.value.filter(c => c.name?.toLowerCase().includes(q))
+})
+
 onMounted(async () => {
-  const { data } = await api.get('/admin/disciplines')
-  disciplines.value = data
-  await load()
+  try {
+    const { data } = await api.get('/admin/disciplines')
+    disciplines.value = data
+    await load()
+  } finally {
+    loading.value = false
+  }
 })
 
 async function load() {
@@ -116,18 +143,28 @@ function openEdit(c) {
 }
 
 async function save() {
-  if (editing.value) {
-    await api.patch(`/admin/courses/${editing.value.id}`, form.value)
-  } else {
-    await api.post('/admin/courses', form.value)
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.patch(`/admin/courses/${editing.value.id}`, form.value)
+    } else {
+      await api.post('/admin/courses', form.value)
+    }
+    modal.value = false
+    await load()
+    toast.success(editing.value ? 'Изменения сохранены' : 'Курс добавлен')
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  } finally {
+    saving.value = false
   }
-  modal.value = false
-  await load()
 }
 
 async function deleteCourse(c) {
-  if (!confirm(`Удалить курс "${c.name}"? Это также удалит все назначения этого курса.`)) return
+  const ok = await confirm({ message: `Удалить курс «${c.name}»? Это также удалит все назначения этого курса.`, danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   await api.delete(`/admin/courses/${c.id}`)
   await load()
+  toast.success('Курс удалён')
 }
 </script>

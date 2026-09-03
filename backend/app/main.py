@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine
 from app.api.v1.router import api_router
 
 
@@ -26,9 +26,10 @@ async def _seed_training_types(session: AsyncSession) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Startup — schema is managed exclusively by Alembic now
+    # (`alembic upgrade head`, run as a deploy step). The app no longer
+    # creates/alters tables itself; see alembic/versions/0001_base_schema.py
+    # for why that matters.
     async with AsyncSession(engine) as session:
         await _seed_training_types(session)
     yield

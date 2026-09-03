@@ -59,6 +59,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 const batches = ref([])
 const batchForCreds = ref('')
@@ -83,7 +86,7 @@ async function download(url, filename) {
     document.body.removeChild(link)
     URL.revokeObjectURL(link.href)
   } catch (err) {
-    alert('Ошибка скачивания: ' + err.message)
+    toast.error('Ошибка скачивания: ' + err.message)
   }
   downloading.value = ''
 }

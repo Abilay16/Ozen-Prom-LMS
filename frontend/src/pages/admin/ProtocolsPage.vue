@@ -13,6 +13,7 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3">
+      <input v-model="search" type="text" placeholder="Поиск по № протокола, организации..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64" />
       <select v-model="filters.training_type_id" @change="load" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Все типы</option>
         <option v-for="tt in trainingTypes" :key="tt.id" :value="tt.id">{{ tt.name_short }}</option>
@@ -27,7 +28,7 @@
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
@@ -46,8 +47,11 @@
           <tr v-else-if="protocols.length === 0">
             <td colspan="6" class="text-center py-8 text-gray-400">Протоколов пока нет</td>
           </tr>
+          <tr v-else-if="filteredProtocols.length === 0">
+            <td colspan="6" class="text-center py-8 text-gray-400">Ничего не найдено по этому запросу.</td>
+          </tr>
           <tr
-            v-for="p in protocols"
+            v-for="p in filteredProtocols"
             :key="p.id"
             class="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
             @click="$router.push(`/admin/protocols/${p.id}`)"
@@ -61,9 +65,7 @@
             <td class="px-4 py-3 text-gray-600">{{ p.organization?.name ?? '—' }}</td>
             <td class="px-4 py-3 text-gray-600">{{ formatDate(p.exam_date) }}</td>
             <td class="px-4 py-3">
-              <span class="px-2 py-0.5 rounded text-xs font-medium" :class="statusClass(p.status)">
-                {{ statusLabel(p.status) }}
-              </span>
+              <Badge :variant="statusVariant(p.status)">{{ statusLabel(p.status) }}</Badge>
             </td>
             <td class="px-4 py-3 text-right" @click.stop>
               <router-link
@@ -79,14 +81,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import Badge from '@/components/Badge.vue'
 
 const isCommission = localStorage.getItem('is_commission') === '1'
 const protocols = ref([])
 const trainingTypes = ref([])
 const loading = ref(true)
+const search = ref('')
 const filters = ref({ training_type_id: '', status: '' })
+
+const filteredProtocols = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return protocols.value
+  return protocols.value.filter(p =>
+    p.protocol_number?.toLowerCase().includes(q) ||
+    p.organization?.name?.toLowerCase().includes(q)
+  )
+})
 
 async function load() {
   loading.value = true
@@ -115,13 +128,13 @@ function statusLabel(s) {
   return { draft: 'Черновик', awaiting_signatures: 'На подписи', signed: 'Подписан', archived: 'Архив' }[s] ?? s
 }
 
-function statusClass(s) {
+function statusVariant(s) {
   return {
-    draft: 'bg-yellow-100 text-yellow-700',
-    awaiting_signatures: 'bg-blue-100 text-blue-700',
-    signed: 'bg-green-100 text-green-700',
-    archived: 'bg-gray-100 text-gray-600',
-  }[s] ?? 'bg-gray-100 text-gray-600'
+    draft: 'progress',
+    awaiting_signatures: 'assigned',
+    signed: 'passed',
+    archived: 'neutral',
+  }[s] ?? 'neutral'
 }
 
 function typeClass(code) {

@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     STORAGE_BACKEND: str = "local"
     STORAGE_LOCAL_PATH: str = "/app/storage"
     MAX_UPLOAD_SIZE_MB: int = 50
+    # Course materials (video/PDF/presentations) allow bigger files — keep in
+    # sync with `client_max_body_size` in docker/nginx/nginx.prod.conf.
+    MAX_MATERIAL_SIZE_MB: int = 500
 
     # App
     ENVIRONMENT: str = "development"
@@ -31,3 +34,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_DEFAULT_SECRET_KEY = "change_me_very_secret_key_at_least_32_chars"
+if settings.ENVIRONMENT == "production" and settings.SECRET_KEY == _DEFAULT_SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is still the default placeholder value while ENVIRONMENT=production. "
+        "Set a real, secret SECRET_KEY in your .env before starting the app — "
+        "otherwise anyone can forge admin JWT tokens."
+    )

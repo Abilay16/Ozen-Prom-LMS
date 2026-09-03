@@ -173,8 +173,11 @@ async def test_sign_with_cms_stores_validity_dates(http, db):
 
 # ── 3. sign WITHOUT cms (backward compat) ─────────────────────────────────────
 
-async def test_sign_without_cms_still_works(http, db):
-    """Signing without a CMS body must still transition the protocol correctly."""
+async def test_sign_without_cms_is_rejected(http, db):
+    """ЭЦП is mandatory — signing with no CMS body must be rejected (422),
+    not silently accepted. (Superseded the old "backward compat" behavior:
+    the product now requires every commission signature to carry a real
+    NCALayer CMS — see SignRequest.cms in app/api/v1/protocols.py.)"""
     admin, token, protocol = await _protocol_awaiting(db)
 
     resp = await http.post(
@@ -183,25 +186,7 @@ async def test_sign_without_cms_still_works(http, db):
         # No JSON body at all
     )
 
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["status"] == "signed"
-
-
-async def test_sign_without_cms_cert_fields_are_null(http, db):
-    """Without CMS the cert fields must be null (not crash)."""
-    admin, token, protocol = await _protocol_awaiting(db)
-
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-    )
-
-    member = next(
-        m for m in resp.json()["commission_members"]
-        if m["admin_user_id"] == str(admin.id)
-    )
-    assert member["signer_cert_serial"] is None
-    assert member["signer_cert_owner"] is None
+    assert resp.status_code == 422, resp.text
 
 
 # ── 4. invalid CMS rejected ────────────────────────────────────────────────────

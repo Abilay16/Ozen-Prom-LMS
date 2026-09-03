@@ -186,6 +186,11 @@
 import { ref, onMounted, nextTick } from 'vue'
 import QRCode from 'qrcode'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const certs = ref([])
 const loading = ref(true)
@@ -253,12 +258,14 @@ async function uploadDoc() {
 }
 
 async function deleteDoc(id) {
-  if (!confirm('Удалить документ?')) return
+  const ok = await confirm({ message: 'Удалить документ?', danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   try {
     await api.delete(`/learner/documents/${id}`)
     userDocs.value = userDocs.value.filter(d => d.id !== id)
+    toast.success('Документ удалён')
   } catch {
-    alert('Ошибка удаления')
+    toast.error('Ошибка удаления')
   }
 }
 

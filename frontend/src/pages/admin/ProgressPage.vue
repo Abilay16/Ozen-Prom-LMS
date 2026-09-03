@@ -59,9 +59,7 @@
               <div class="text-xs text-gray-400">{{ row.course?.name }}</div>
             </td>
             <td class="px-4 py-3">
-              <span :class="statusBadge(row.status)" class="px-2 py-1 rounded-full text-xs font-medium">
-                {{ statusLabel(row.status) }}
-              </span>
+              <Badge :variant="statusVariant(row.status)">{{ statusLabel(row.status) }}</Badge>
             </td>
             <td class="px-4 py-3">
               <span v-if="row.best_score != null"
@@ -93,6 +91,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import Badge from '@/components/Badge.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const rows = ref([])
 const organizations = ref([])
@@ -130,22 +134,24 @@ function statusLabel(s) {
   return { assigned: 'Назначен', in_progress: 'В процессе', passed: 'Сдан', failed: 'Не сдан' }[s] || s
 }
 
-function statusBadge(s) {
+function statusVariant(s) {
   return {
-    assigned: 'bg-gray-100 text-gray-600',
-    in_progress: 'bg-blue-100 text-blue-700',
-    passed: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-600',
-  }[s] || 'bg-gray-100 text-gray-600'
+    assigned: 'neutral',
+    in_progress: 'assigned',
+    passed: 'passed',
+    failed: 'failed',
+  }[s] || 'neutral'
 }
 
 async function allowRetake(assignmentId) {
-  if (!confirm('Разрешить пересдачу? Все предыдущие попытки будут сброшены.')) return
+  const ok = await confirm({ message: 'Разрешить пересдачу? Все предыдущие попытки будут сброшены.', danger: true, confirmText: 'Разрешить' })
+  if (!ok) return
   try {
     await api.post(`/admin/progress/${assignmentId}/allow-retake`)
     await load()
+    toast.success('Пересдача разрешена')
   } catch (e) {
-    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+    toast.error(apiErrorMessage(e))
   }
 }
 </script>

@@ -19,6 +19,20 @@ from app.core.exceptions import NotFoundError, ForbiddenError
 router = APIRouter()
 
 
+async def _assert_material_assigned(db, user_id: UUID, course_id: UUID) -> None:
+    """Ensure the learner has an assignment for the material's course —
+    prevents any authenticated learner from accessing another course's
+    materials by guessing/sharing a material_id."""
+    result = await db.execute(
+        select(UserCourseAssignment.id).where(
+            UserCourseAssignment.user_id == user_id,
+            UserCourseAssignment.course_id == course_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise ForbiddenError("Материал не назначен вам")
+
+
 @router.get("/me")
 async def get_me(learner: CurrentLearner, db: DB):
     # Load org and position for the print card
@@ -209,6 +223,7 @@ async def view_material(request: Request, material_id: UUID, db: DB, token: Opti
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
         raise NotFoundError("Material not found")
+    await _assert_material_assigned(db, UUID(payload["sub"]), material.course_id)
     if not os.path.exists(material.file_path):
         raise NotFoundError("File not found on disk")
 
@@ -248,6 +263,7 @@ async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
         raise NotFoundError("Material not found")
+    await _assert_material_assigned(db, learner.id, material.course_id)
     if not os.path.exists(material.file_path):
         raise NotFoundError("File not found on disk")
     return FileResponse(
@@ -275,6 +291,7 @@ async def stream_material(material_id: UUID, token: str, db: DB):
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
         raise NotFoundError("Material not found")
+    await _assert_material_assigned(db, UUID(payload["sub"]), material.course_id)
     if not os.path.exists(material.file_path):
         raise NotFoundError("File not found on disk")
 

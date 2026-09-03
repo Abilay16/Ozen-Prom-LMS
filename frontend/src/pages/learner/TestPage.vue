@@ -62,6 +62,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/services/api'
 import ResultPage from './ResultPage.vue'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -155,7 +158,7 @@ async function submitTest(isAutoSubmit = false) {
     result.value = data
     submitted.value = true
   } catch (e) {
-    if (!isAutoSubmit) alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+    if (!isAutoSubmit) toast.error(apiErrorMessage(e))
     else router.replace('/my/courses')
   } finally {
     submitting.value = false

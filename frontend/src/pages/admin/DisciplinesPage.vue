@@ -5,27 +5,39 @@
       <button @click="openCreate" class="btn-primary">+ Добавить</button>
     </div>
 
-    <div v-if="modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div class="card w-full max-w-sm">
-        <h2 class="font-semibold text-lg mb-4">Дисциплина</h2>
-        <div class="space-y-3">
-          <div>
-            <label class="text-sm font-medium text-gray-700">Код (напр. BIOT)</label>
-            <input v-model="form.code" class="input-field mt-1 uppercase" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Название (напр. БиОТ)</label>
-            <input v-model="form.name" class="input-field mt-1" />
-          </div>
-        </div>
-        <div class="flex gap-3 mt-4">
-          <button @click="save" class="btn-primary">Сохранить</button>
-          <button @click="modal = false" class="btn-secondary">Отмена</button>
-        </div>
-      </div>
+    <div v-if="disciplines.length" class="flex gap-3 mb-4">
+      <input v-model="search" type="text" placeholder="Поиск по коду, названию..." class="input-field max-w-xs" />
     </div>
 
-    <div class="card overflow-x-auto">
+    <Modal v-model="modal" title="Дисциплина" max-width="max-w-sm">
+      <div class="space-y-3">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Код (напр. BIOT)</label>
+          <input v-model="form.code" class="input-field mt-1 uppercase" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Название (напр. БиОТ)</label>
+          <input v-model="form.name" class="input-field mt-1" />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="save" :disabled="saving" class="btn-primary">Сохранить</button>
+        <button @click="modal = false" class="btn-secondary">Отмена</button>
+      </template>
+    </Modal>
+
+    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+
+    <div v-else-if="!disciplines.length" class="text-center py-16 text-gray-400">
+      <div class="text-4xl mb-2">🏷️</div>
+      <div>Нет дисциплин. Добавьте первую.</div>
+    </div>
+
+    <div v-else-if="!filteredDisciplines.length" class="text-center py-16 text-gray-400">
+      Ничего не найдено по этому запросу.
+    </div>
+
+    <div v-else class="card overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-brand-dark text-white">
           <tr>
@@ -36,11 +48,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in disciplines" :key="d.id" class="border-b hover:bg-gray-50">
+          <tr v-for="d in filteredDisciplines" :key="d.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-3 font-mono font-medium">{{ d.code }}</td>
             <td class="px-4 py-3">{{ d.name }}</td>
             <td class="px-4 py-3">
-              <span :class="d.is_active ? 'badge-passed' : 'badge-failed'">{{ d.is_active ? 'Активна' : 'Неактивна' }}</span>
+              <Badge :variant="d.is_active ? 'passed' : 'failed'">{{ d.is_active ? 'Активна' : 'Неактивна' }}</Badge>
             </td>
             <td class="px-4 py-3 flex gap-3">
               <button @click="openEdit(d)" class="text-xs text-blue-600 hover:underline">Изменить</button>
@@ -53,19 +65,39 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
+import Modal from '@/components/Modal.vue'
+import Badge from '@/components/Badge.vue'
+
+const toast = useToast()
+const { confirm } = useConfirm()
 
 const disciplines = ref([])
+const search = ref('')
 const modal = ref(false)
 const editing = ref(null)
+const loading = ref(true)
+const saving = ref(false)
 const form = ref({ code: '', name: '' })
+
+const filteredDisciplines = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return disciplines.value
+  return disciplines.value.filter(d => d.code?.toLowerCase().includes(q) || d.name?.toLowerCase().includes(q))
+})
 
 onMounted(load)
 
 async function load() {
-  const { data } = await api.get('/admin/disciplines')
-  disciplines.value = data
+  try {
+    const { data } = await api.get('/admin/disciplines')
+    disciplines.value = data
+  } finally {
+    loading.value = false
+  }
 }
 
 function openCreate() {
@@ -81,18 +113,28 @@ function openEdit(d) {
 }
 
 async function save() {
-  if (editing.value) {
-    await api.patch(`/admin/disciplines/${editing.value.id}`, form.value)
-  } else {
-    await api.post('/admin/disciplines', form.value)
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.patch(`/admin/disciplines/${editing.value.id}`, form.value)
+    } else {
+      await api.post('/admin/disciplines', form.value)
+    }
+    modal.value = false
+    await load()
+    toast.success(editing.value ? 'Изменения сохранены' : 'Дисциплина добавлена')
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  } finally {
+    saving.value = false
   }
-  modal.value = false
-  await load()
 }
 
 async function deleteDisc(d) {
-  if (!confirm(`Удалить дисциплину "${d.name}"?`)) return
+  const ok = await confirm({ message: `Удалить дисциплину «${d.name}»?`, danger: true, confirmText: 'Удалить' })
+  if (!ok) return
   await api.delete(`/admin/disciplines/${d.id}`)
   await load()
+  toast.success('Дисциплина удалена')
 }
 </script>

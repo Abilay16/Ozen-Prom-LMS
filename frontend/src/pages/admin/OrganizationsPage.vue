@@ -5,40 +5,51 @@
       <button @click="openCreate" class="btn-primary">+ Добавить</button>
     </div>
 
-    <!-- Modal -->
-    <div v-if="modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div class="card w-full max-w-md">
-        <h2 class="font-semibold text-lg mb-4">{{ editing ? 'Редактировать' : 'Новая организация' }}</h2>
-        <div class="space-y-3">
-          <div>
-            <label class="text-sm font-medium text-gray-700">Полное название</label>
-            <input v-model="form.name" class="input-field mt-1" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Краткое название</label>
-            <input v-model="form.short_name" class="input-field mt-1" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">БИН</label>
-            <input v-model="form.bin" class="input-field mt-1" maxlength="12" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Email контакта</label>
-            <input v-model="form.contact_email" type="email" class="input-field mt-1" />
-          </div>
-          <div>
-            <label class="text-sm font-medium text-gray-700">Телефон контакта</label>
-            <input v-model="form.contact_phone" class="input-field mt-1" />
-          </div>
-        </div>
-        <div class="flex gap-3 mt-4">
-          <button @click="save" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
-          <button @click="modal = false" class="btn-secondary">Отмена</button>
-        </div>
-      </div>
+    <div class="flex gap-3 mb-4">
+      <input v-model="search" type="text" placeholder="Поиск по названию, БИН..." class="input-field max-w-xs" />
     </div>
 
-    <div class="card overflow-x-auto">
+    <Modal v-model="modal" :title="editing ? 'Редактировать' : 'Новая организация'" max-width="max-w-md">
+      <div class="space-y-3">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Полное название</label>
+          <input v-model="form.name" class="input-field mt-1" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Краткое название</label>
+          <input v-model="form.short_name" class="input-field mt-1" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">БИН</label>
+          <input v-model="form.bin" class="input-field mt-1" maxlength="12" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Email контакта</label>
+          <input v-model="form.contact_email" type="email" class="input-field mt-1" />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Телефон контакта</label>
+          <input v-model="form.contact_phone" class="input-field mt-1" />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="save" :disabled="saving" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
+        <button @click="modal = false" class="btn-secondary">Отмена</button>
+      </template>
+    </Modal>
+
+    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+
+    <div v-else-if="!orgs.length" class="text-center py-16 text-gray-400">
+      <div class="text-4xl mb-2">🏢</div>
+      <div>Нет организаций. Добавьте первую.</div>
+    </div>
+
+    <div v-else-if="!filteredOrgs.length" class="text-center py-16 text-gray-400">
+      Ничего не найдено по этому запросу.
+    </div>
+
+    <div v-else class="card overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-brand-dark text-white">
           <tr>
@@ -50,7 +61,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="org in orgs" :key="org.id" class="border-b hover:bg-gray-50">
+          <tr v-for="org in filteredOrgs" :key="org.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-3 font-medium">{{ org.name }}</td>
             <td class="px-4 py-3">{{ org.short_name }}</td>
             <td class="px-4 py-3">{{ org.bin }}</td>
@@ -65,19 +76,39 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+import Modal from '@/components/Modal.vue'
 
+const toast = useToast()
 const orgs = ref([])
+const search = ref('')
 const modal = ref(false)
 const editing = ref(null)
+const loading = ref(true)
+const saving = ref(false)
 const form = ref({ name: '', short_name: '', bin: '', contact_email: '', contact_phone: '' })
+
+const filteredOrgs = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return orgs.value
+  return orgs.value.filter(o =>
+    o.name?.toLowerCase().includes(q) ||
+    o.short_name?.toLowerCase().includes(q) ||
+    o.bin?.toLowerCase().includes(q)
+  )
+})
 
 onMounted(load)
 
 async function load() {
-  const { data } = await api.get('/admin/organizations')
-  orgs.value = data
+  try {
+    const { data } = await api.get('/admin/organizations')
+    orgs.value = data
+  } finally {
+    loading.value = false
+  }
 }
 
 function openCreate() {
@@ -93,12 +124,20 @@ function openEdit(org) {
 }
 
 async function save() {
-  if (editing.value) {
-    await api.patch(`/admin/organizations/${editing.value.id}`, form.value)
-  } else {
-    await api.post('/admin/organizations', form.value)
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.patch(`/admin/organizations/${editing.value.id}`, form.value)
+    } else {
+      await api.post('/admin/organizations', form.value)
+    }
+    modal.value = false
+    await load()
+    toast.success(editing.value ? 'Изменения сохранены' : 'Организация добавлена')
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  } finally {
+    saving.value = false
   }
-  modal.value = false
-  await load()
 }
 </script>

@@ -204,6 +204,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
 import PdfViewer from '@/components/PdfViewer.vue'
+import { useToast, apiErrorMessage } from '@/composables/useToast'
+
+const toast = useToast()
 
 // Android Chrome needs PDF.js (canvas, scrollable parent).
 // iOS Safari and Desktop use native iframe rendering (scroll inside iframe).
@@ -377,7 +380,7 @@ async function startTest() {
     sessionStorage.setItem('testData_' + data.attempt_id, JSON.stringify(data))
     router.push({ path: `/my/test/${data.attempt_id}`, state: { testData: data } })
   } catch (e) {
-    alert('Ошибка: ' + (e.response?.data?.detail || e.message))
+    toast.error(apiErrorMessage(e))
   } finally {
     starting.value = false
   }
@@ -408,7 +411,7 @@ async function downloadMaterial(mat) {
     a.click()
     URL.revokeObjectURL(url)
   } catch {
-    alert('Не удалось скачать файл')
+    toast.error('Не удалось скачать файл')
   }
 }
 

@@ -85,3 +85,5 @@ Final_vision_of_project.md
 *.csv
 # Allow sample/template files if explicitly needed:
 # !storage/sample_employees.xlsx
+backups/
+Ozen_Prom_LMS_source_code.txt
