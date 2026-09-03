@@ -195,7 +195,7 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
     """Manually add a single user to a batch and assign courses."""
     from fastapi import HTTPException
     from app.services.users.factory import UserFactoryService
-    from app.services.positions.normalizer import normalize_position, positions_match
+    from app.services.positions.normalizer import normalize_position, find_course_for_position
     from app.models.organization import Organization
     from app.models.user import User
     from app.models.assignment import UserCourseAssignment, AssignmentStatus
@@ -257,27 +257,7 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
 
     assigned_courses = []
     for disc in batch_disciplines:
-        res2 = await db.execute(
-            select(Course)
-            .where(Course.discipline_id == disc.id, Course.is_active == True)
-            .order_by(Course.name)
-        )
-        courses = res2.scalars().all()
-        course = None
-        generic = None
-        for c in courses:
-            tp = (c.target_positions or "").strip()
-            if not tp:
-                generic = c
-                continue
-            for kw in [k.strip() for k in tp.replace(";", ",").split(",") if k.strip()]:
-                if positions_match(kw, norm_position):
-                    course = c
-                    break
-            if course:
-                break
-        if not course:
-            course = generic
+        course = await find_course_for_position(db, disc.id, norm_position)
         if course:
             db.add(UserCourseAssignment(
                 user_id=user.id, course_id=course.id,
@@ -288,6 +268,7 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
 
     await db.flush()
     return {
+        "user_id": str(user.id),
         "full_name": full_name,
         "login": user.login,
         "password": plain_password,
@@ -295,3 +276,48 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
         "position": position_raw,
         "courses": ", ".join(assigned_courses) or "—",
     }
+
+
+@router.post("/{batch_id}/users/{user_id}/rematch-courses", status_code=200)
+async def rematch_user_courses(batch_id: UUID, user_id: UUID, db: DB, admin: CurrentSuperAdmin):
+    """Re-run course matching for one batch member against the batch's current
+    disciplines/courses. Useful after an admin fixes a course's target_positions
+    (or adds a new course) to cover a position that didn't match at import/add
+    time — without this, such a user would be stuck with zero course
+    assignments forever and could never appear in a protocol."""
+    from app.services.positions.normalizer import normalize_position, find_course_for_position
+    from app.models.user import User
+    from app.models.assignment import UserCourseAssignment, AssignmentStatus
+
+    batch = (await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))).scalar_one_or_none()
+    if not batch:
+        raise NotFoundError("Batch not found")
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise NotFoundError("User not found")
+
+    norm_position = normalize_position(user.position_raw or "")
+
+    existing_res = await db.execute(
+        select(UserCourseAssignment).where(UserCourseAssignment.user_id == user_id)
+    )
+    covered_discipline_ids = {a.discipline_id for a in existing_res.scalars().all()}
+
+    assigned_courses = []
+    for did in (batch.discipline_ids or []):
+        if did in covered_discipline_ids:
+            continue
+        disc = (await db.execute(select(Discipline).where(Discipline.id == did))).scalar_one_or_none()
+        if not disc:
+            continue
+        course = await find_course_for_position(db, disc.id, norm_position)
+        if course:
+            db.add(UserCourseAssignment(
+                user_id=user.id, course_id=course.id,
+                discipline_id=disc.id, batch_id=batch.id,
+                status=AssignmentStatus.assigned,
+            ))
+            assigned_courses.append(f"{disc.name}: {course.name}")
+
+    await db.flush()
+    return {"courses": ", ".join(assigned_courses) or "—"}

@@ -26,7 +26,7 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.services.imports.parser import ImportParserService
 from app.services.users.factory import UserFactoryService
-from app.services.positions.normalizer import normalize_position, positions_match
+from app.services.positions.normalizer import normalize_position, find_course_for_position
 
 
 class ImportRowProcessor:
@@ -45,22 +45,7 @@ class ImportRowProcessor:
         return org
 
     async def _find_course_for_position(self, discipline_id: UUID, norm_position: str):
-        result = await self.db.execute(
-            select(Course)
-            .where(Course.discipline_id == discipline_id, Course.is_active == True)
-            .order_by(Course.name)
-        )
-        courses = result.scalars().all()
-        generic = None
-        for course in courses:
-            tp = (course.target_positions or "").strip()
-            if not tp:
-                generic = course
-                continue
-            for kw in [k.strip() for k in tp.replace(";", ",").split(",") if k.strip()]:
-                if positions_match(kw, norm_position):
-                    return course
-        return generic
+        return await find_course_for_position(self.db, discipline_id, norm_position)
 
     async def process_batch(self, batch: TrainingBatch) -> dict:
         parser = ImportParserService()

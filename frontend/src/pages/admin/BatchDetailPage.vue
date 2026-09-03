@@ -98,7 +98,21 @@
             <div><span class="text-gray-500">Логин:</span> <span class="font-mono font-bold text-blue-700">{{ manualResult.login }}</span></div>
             <div><span class="text-gray-500">Пароль:</span> <span class="font-mono font-bold text-green-700">{{ manualResult.password }}</span></div>
           </div>
-          <div v-if="manualResult.courses" class="mt-1 text-xs text-gray-500">Курсы: {{ manualResult.courses }}</div>
+          <div v-if="manualResult.courses && manualResult.courses !== '—'" class="mt-1 text-xs text-gray-500">
+            Курсы: {{ manualResult.courses }}
+          </div>
+        </div>
+        <div v-if="!manualResult.courses || manualResult.courses === '—'"
+             class="p-3 bg-orange-50 border border-orange-200 rounded text-sm text-orange-800 space-y-2">
+          <div>
+            ⚠ Ни один курс не назначен — для должности «{{ manualResult.position || '—' }}» нет подходящего курса
+            ни в одной из дисциплин потока. Сотрудник не сможет пройти обучение и никогда не попадёт в протокол,
+            пока у него нет назначенного курса. Поправьте курс для этой должности на странице «Курсы» (поле
+            «Подходящие должности»), затем нажмите кнопку ниже.
+          </div>
+          <button @click="rematchCourses" :disabled="rematching" class="btn-secondary text-orange-800 border-orange-300">
+            {{ rematching ? 'Проверяю...' : 'Проверить курсы ещё раз' }}
+          </button>
         </div>
         <div class="flex gap-3">
           <button @click="manualForm = { full_name: '', position: '', organization: '' }; manualResult = null" class="btn-secondary">Добавить ещё одного</button>
@@ -243,6 +257,25 @@ const manualModal = ref(false)
 const manualAdding = ref(false)
 const manualResult = ref(null)
 const manualForm = ref({ full_name: '', position: '', organization: '' })
+const rematching = ref(false)
+
+async function rematchCourses() {
+  if (!manualResult.value?.user_id) return
+  rematching.value = true
+  try {
+    const { data } = await api.post(`/admin/batches/${batchId}/users/${manualResult.value.user_id}/rematch-courses`)
+    manualResult.value = { ...manualResult.value, courses: data.courses }
+    if (data.courses && data.courses !== '—') {
+      toast.success('Курс найден и назначен')
+    } else {
+      toast.error('Подходящий курс всё ещё не найден')
+    }
+  } catch (err) {
+    toast.error(apiErrorMessage(err))
+  } finally {
+    rematching.value = false
+  }
+}
 
 async function addUserManually() {
   if (!manualForm.value.full_name.trim()) { toast.error('Введите ФИО'); return }
