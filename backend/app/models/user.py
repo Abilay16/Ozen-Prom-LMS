@@ -43,10 +43,19 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
+    # passive_deletes=True on the two CASCADE children below tells SQLAlchemy
+    # to trust the DB's own ON DELETE CASCADE (see ondelete="CASCADE" on their
+    # user_id column) instead of loading every assignment/attempt into the
+    # session to null out a NOT NULL FK itself — without this, deleting a
+    # user raises an IntegrityError (NOT NULL violation) at flush time.
     organization: Mapped["Organization"] = relationship("Organization", back_populates="users")  # noqa
     position: Mapped["Position"] = relationship("Position")  # noqa
-    assignments: Mapped[list["UserCourseAssignment"]] = relationship("UserCourseAssignment", back_populates="user")  # noqa
-    attempts: Mapped[list["TestAttempt"]] = relationship("TestAttempt", back_populates="user")  # noqa
+    assignments: Mapped[list["UserCourseAssignment"]] = relationship(
+        "UserCourseAssignment", back_populates="user", passive_deletes=True
+    )  # noqa
+    attempts: Mapped[list["TestAttempt"]] = relationship(
+        "TestAttempt", back_populates="user", passive_deletes=True
+    )  # noqa
 
 
 class AdminUser(Base):
