@@ -665,7 +665,7 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
             UserCourseAssignment.status == AssignmentStatus.passed,
         )
         .distinct()
-        .options(selectinload(User.position))
+        .options(selectinload(User.position), selectinload(User.organization))
     )
     batch_users = result.scalars().all()
 
@@ -711,11 +711,15 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
             skipped_already_certified += 1
             continue
         position_str = user.position_raw or (user.position.name if user.position else None)
+        # Fall back to the worker's own organization when the protocol/batch
+        # itself has none set — otherwise "Место работы" ends up blank on
+        # their certificate even though it's filled in on their user profile.
+        participant_org_name = org_name or (user.organization.name if user.organization else None)
         db.add(ProtocolParticipant(
             protocol_id=protocol_id,
             user_id=user.id,
             full_name=user.full_name,
-            organization_name=org_name,
+            organization_name=participant_org_name,
             position=position_str,
             sort_order=len(protocol.participants) + i,
         ))
@@ -789,7 +793,7 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
             participant_id=participant.id,
             training_type_id=protocol.training_type_id,
             full_name=participant.full_name,
-            organization_name=org_name,
+            organization_name=participant.organization_name or org_name,
             position=participant.position,
             issued_date=issued_date,
             valid_until=valid_until,

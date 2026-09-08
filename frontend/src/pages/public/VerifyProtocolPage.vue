@@ -43,11 +43,23 @@
         <hr class="my-4 border-gray-100">
 
         <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Комиссия</h2>
-        <div class="space-y-2 mb-4">
+        <div class="space-y-3 mb-4">
           <div v-for="m in p.commission_members" :key="m.id" class="text-sm">
-            <span class="font-medium text-gray-800">{{ m.role === 'chair' ? 'Председатель' : 'Член комиссии' }}:</span>
-            {{ m.full_name }}
-            <span v-if="m.position_title" class="text-gray-500"> — {{ m.position_title }}</span>
+            <div>
+              <span class="font-medium text-gray-800">{{ m.role === 'chair' ? 'Председатель' : 'Член комиссии' }}:</span>
+              {{ m.full_name }}
+              <span v-if="m.position_title" class="text-gray-500"> — {{ m.position_title }}</span>
+            </div>
+            <div v-if="m.signer_cert_serial" class="mt-1.5">
+              <SignatureStamp
+                :serial="m.signer_cert_serial"
+                :owner="m.signer_cert_owner"
+                :valid-from="m.signer_cert_valid_from"
+                :valid-to="m.signer_cert_valid_to"
+                :signed-at="m.signed_at"
+                compact
+              />
+            </div>
           </div>
         </div>
 
@@ -80,6 +92,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/services/api'
+import SignatureStamp from '@/components/SignatureStamp.vue'
 
 const route = useRoute()
 const p = ref(null)

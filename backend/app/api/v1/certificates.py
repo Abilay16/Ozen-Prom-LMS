@@ -378,6 +378,11 @@ async def verify_certificate_protocol(cert_id: UUID, db: DB):
                 "role": m.role.value,
                 "position_title": m.position_title,
                 "full_name": m.full_name,
+                "signed_at": m.signed_at.isoformat() if m.signed_at else None,
+                "signer_cert_serial": m.signer_cert_serial,
+                "signer_cert_owner": m.signer_cert_owner,
+                "signer_cert_valid_from": m.signer_cert_valid_from.isoformat() if m.signer_cert_valid_from else None,
+                "signer_cert_valid_to": m.signer_cert_valid_to.isoformat() if m.signer_cert_valid_to else None,
             }
             for m in sorted(proto.commission_members, key=lambda x: x.sort_order)
         ],
