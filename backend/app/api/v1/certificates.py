@@ -45,6 +45,7 @@ class CertificateOut(BaseModel):
     valid_until: Optional[date]
     is_renewal: bool
     pdf_path: Optional[str]
+    photo_url: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -117,6 +118,14 @@ async def create_certificate(data: CertificateCreate, db: DB, admin: CurrentSupe
     return cert
 
 
+async def _resolve_photo_url(db, user_id: Optional[UUID]) -> Optional[str]:
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    return f"/api/v1/users/{user_id}/photo" if user and user.photo_path else None
+
+
 @router.get("/{cert_id}", response_model=CertificateOut)
 async def get_certificate(cert_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(
@@ -127,7 +136,9 @@ async def get_certificate(cert_id: UUID, db: DB, admin: CurrentAdmin):
     cert = result.scalar_one_or_none()
     if not cert:
         raise NotFoundError("Удостоверение не найдено")
-    return cert
+    out = CertificateOut.model_validate(cert)
+    out.photo_url = await _resolve_photo_url(db, cert.user_id)
+    return out
 
 
 @router.patch("/{cert_id}", response_model=CertificateOut)
@@ -180,7 +191,9 @@ async def my_certificate_detail(cert_id: UUID, db: DB, learner: CurrentLearner):
     cert = result.scalar_one_or_none()
     if not cert:
         raise NotFoundError("Удостоверение не найдено")
-    return cert
+    out = CertificateOut.model_validate(cert)
+    out.photo_url = await _resolve_photo_url(db, cert.user_id)
+    return out
 
 
 # ── Public verification ───────────────────────────────────────────────────────
