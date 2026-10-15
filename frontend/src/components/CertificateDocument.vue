@@ -144,9 +144,9 @@
           <!-- LEFT: main cert info -->
           <div class="cert-grid-left" style="padding:20px 24px; border-right:2px solid #333;">
 
-            <!-- Org name -->
+            <!-- Org name (the training center that issued it, not the worker's employer — that's "Место работы" below) -->
             <div style="min-height:40px; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:2px; font-size:10pt;">
-              {{ cert.organization_name || '' }}
+              ТОО "Озен-Пром"
             </div>
             <div style="font-size:8pt; color:#555; margin-bottom:14px; text-align:center;">(полное наименование организации)</div>
 
@@ -301,7 +301,12 @@
             Место работы: <strong>{{ cert.organization_name || '—' }}</strong>
           </p>
           <p style="margin-bottom:6px;">
-            в том, что он(а) сдал(а) экзамены на знание <strong>{{ cert.training_type?.name_ru ?? 'требований безопасности' }}</strong>
+            <template v-if="cert.training_type?.code === 'biot'">
+              в том, что он(а) сдал(а) экзамены на знание - <strong>Безопасность и охрана труда</strong>
+            </template>
+            <template v-else>
+              в том, что он(а) сдал(а) экзамены на знание <strong>{{ cert.training_type?.name_ru ?? 'требований безопасности' }}</strong>
+            </template>
           </p>
         </div>
 
