@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     full_name: str
     organization_id: Optional[UUID]
     position_raw: Optional[str]
+    education: Optional[str] = None
     is_active: bool
     plain_password: Optional[str] = None
     photo_path: Optional[str] = None
@@ -50,6 +51,7 @@ class ResetPasswordRequest(BaseModel):
 class CreateUserRequest(BaseModel):
     full_name: str
     position_raw: Optional[str] = None
+    education: Optional[str] = None
     organization_name: Optional[str] = None  # free-text; looked up or created
     organization_id: Optional[UUID] = None   # fallback if ID is known
     login: Optional[str] = None       # omit to auto-generate
@@ -97,6 +99,7 @@ async def create_user(data: CreateUserRequest, db: DB, admin: CurrentAdmin):
             normalized_full_name=factory.normalize_full_name(data.full_name),
             organization_id=org_id,
             position_raw=data.position_raw,
+            education=data.education,
         )
         db.add(user)
         await db.flush()
@@ -107,6 +110,7 @@ async def create_user(data: CreateUserRequest, db: DB, admin: CurrentAdmin):
             position_raw=data.position_raw,
         )
         user.plain_password = plain
+        user.education = data.education
         if data.password:
             user.password_hash = hash_password(data.password)
             user.plain_password = data.password
@@ -150,6 +154,7 @@ class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
     position_raw: Optional[str] = None
+    education: Optional[str] = None
     new_password: Optional[str] = None
 
 
@@ -166,6 +171,8 @@ async def update_user(user_id: UUID, data: UpdateUserRequest, db: DB, admin: Cur
         user.is_active = data.is_active
     if data.position_raw is not None:
         user.position_raw = data.position_raw
+    if data.education is not None:
+        user.education = data.education
     if data.new_password:
         user.password_hash = hash_password(data.new_password)
         user.plain_password = data.new_password

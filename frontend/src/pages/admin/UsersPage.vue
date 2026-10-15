@@ -99,6 +99,15 @@
             <input v-model="form.position_raw" class="input-field mt-1" />
           </div>
           <div>
+            <label class="text-sm font-medium text-gray-700">Образование</label>
+            <select v-model="form.education" class="input-field mt-1">
+              <option value="">— не указано —</option>
+              <option value="высшее">Высшее</option>
+              <option value="среднее">Среднее</option>
+              <option value="среднее специальное">Среднее специальное</option>
+            </select>
+          </div>
+          <div>
             <label class="text-sm font-medium text-gray-700">Организация</label>
             <input v-model="form.organization_name" list="orgs-datalist" class="input-field mt-1" placeholder="Название организации" />
             <datalist id="orgs-datalist">
@@ -172,7 +181,7 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  form.value = { full_name: '', login: '', new_password: '', position_raw: '', organization_name: '', role: 'learner', is_active: true }
+  form.value = { full_name: '', login: '', new_password: '', position_raw: '', education: '', organization_name: '', role: 'learner', is_active: true }
   modal.value = true
 }
 
@@ -181,6 +190,7 @@ function openEdit(u) {
   form.value = {
     full_name: u.full_name,
     position_raw: u.position_raw || '',
+    education: u.education || '',
     organization_name: orgName(u.organization_id) !== '—' ? orgName(u.organization_id) : '',
     is_active: u.is_active,
     new_password: '',
@@ -199,6 +209,7 @@ async function save() {
       const payload = {
         full_name: form.value.full_name,
         position_raw: form.value.position_raw,
+        education: form.value.education,
         is_active: form.value.is_active,
       }
       if (form.value.organization_name) payload.organization_name = form.value.organization_name
@@ -215,6 +226,7 @@ async function save() {
       if (form.value.login) payload.login = form.value.login
       if (form.value.new_password) payload.password = form.value.new_password
       if (form.value.position_raw) payload.position_raw = form.value.position_raw
+      if (form.value.education) payload.education = form.value.education
       if (form.value.organization_name) payload.organization_name = form.value.organization_name
       const { data } = await api.post('/admin/users', payload)
       users.value.unshift(data)

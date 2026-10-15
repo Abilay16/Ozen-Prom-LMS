@@ -30,6 +30,7 @@ class User(Base):
         ForeignKey("positions.id", ondelete="SET NULL")
     )
     position_raw: Mapped[str | None] = mapped_column(String(255))  # original from Excel
+    education: Mapped[str | None] = mapped_column(String(50))  # высшее / среднее / среднее специальное
     batch_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("training_batches.id", ondelete="SET NULL")
     )  # First import batch

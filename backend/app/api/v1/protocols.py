@@ -721,6 +721,7 @@ async def import_participants_from_batch(protocol_id: UUID, db: DB, admin: Curre
             full_name=user.full_name,
             organization_name=participant_org_name,
             position=position_str,
+            education=user.education,
             sort_order=len(protocol.participants) + i,
         ))
         added.append(user.full_name)
