@@ -113,6 +113,7 @@ class ProtocolCreate(BaseModel):
     legal_basis: Optional[str] = None
     regulatory_docs: Optional[str] = None
     check_type: Optional[CheckType] = None
+    validity_years_override: Optional[int] = None
     commission_members: list[CommissionMemberIn] = []
     participants: list[ParticipantIn] = []
 
@@ -128,6 +129,7 @@ class ProtocolUpdate(BaseModel):
     legal_basis: Optional[str] = None
     regulatory_docs: Optional[str] = None
     check_type: Optional[CheckType] = None
+    validity_years_override: Optional[int] = None
     status: Optional[ProtocolStatus] = None
 
 
@@ -164,6 +166,7 @@ class ProtocolOut(BaseModel):
     legal_basis: Optional[str]
     regulatory_docs: Optional[str]
     check_type: Optional[CheckType] = None
+    validity_years_override: Optional[int] = None
     status: ProtocolStatus
     created_at: datetime
     commission_members: list[CommissionMemberOut] = []
@@ -284,6 +287,7 @@ async def create_protocol(data: ProtocolCreate, db: DB, admin: CurrentSuperAdmin
         legal_basis=data.legal_basis,
         regulatory_docs=data.regulatory_docs,
         check_type=data.check_type,
+        validity_years_override=data.validity_years_override,
         created_by_id=admin.id,
     )
     db.add(protocol)
@@ -747,7 +751,7 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
         select(TrainingType).where(TrainingType.id == protocol.training_type_id)
     )
     training_type = tt_result.scalar_one_or_none()
-    validity_years = training_type.validity_years if training_type else 1
+    validity_years = protocol.validity_years_override or (training_type.validity_years if training_type else 1)
 
     # Load organization name (from protocol or batch)
     org_name = None

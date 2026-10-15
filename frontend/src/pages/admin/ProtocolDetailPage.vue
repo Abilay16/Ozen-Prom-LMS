@@ -73,6 +73,13 @@
                 <option value="внеплановый">Внеплановый</option>
               </select>
             </div>
+            <div v-if="validityCategoryOptions.length">
+              <label class="block text-xs text-gray-500 mb-1">{{ validityCategoryLabel }}</label>
+              <select v-model.number="form.validity_years_override" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
+                <option :value="null">— по умолчанию ({{ selectedTrainingType?.validity_years }} г.) —</option>
+                <option v-for="opt in validityCategoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
           </div>
           <div class="flex justify-end gap-3 mt-4">
             <button
@@ -359,6 +366,7 @@ const form = ref({
   legal_basis: '',
   regulatory_docs: '',
   check_type: '',
+  validity_years_override: null,
 })
 
 const newMember = ref({ role: 'member', admin_user_id: '', position_title: '' })
@@ -377,6 +385,33 @@ const myCommissionSlot = computed(() =>
 const unsignedMembersCount = computed(() =>
   protocol.value?.commission_members.filter(m => m.role === 'member' && !m.signed_at).length ?? 0
 )
+
+// БиОТ/ПромБез: validity depends on рабочий vs ИТР. ПТМ: depends on с
+// отрывом vs без отрыва от производства. Other types (e.g. ЭлБез) have no
+// such split — just use the training type's own validity_years.
+const selectedTrainingType = computed(() =>
+  trainingTypes.value.find(t => t.id === form.value.training_type_id) ?? null
+)
+const validityCategoryOptions = computed(() => {
+  const code = selectedTrainingType.value?.code
+  if (code === 'biot' || code === 'prombez') {
+    return [
+      { value: 1, label: 'Рабочие (1 год)' },
+      { value: 3, label: 'ИТР (3 года)' },
+    ]
+  }
+  if (code === 'ptm') {
+    return [
+      { value: 3, label: 'С отрывом от производства (3 года)' },
+      { value: 1, label: 'Без отрыва от производства (1 год)' },
+    ]
+  }
+  return []
+})
+const validityCategoryLabel = computed(() => {
+  const code = selectedTrainingType.value?.code
+  return code === 'ptm' ? 'Форма обучения' : 'Категория сотрудников'
+})
 
 function flash(msg, type = 'success') {
   if (type === 'success') toast.success(msg)
@@ -398,6 +433,7 @@ async function loadProtocol() {
     legal_basis: res.data.legal_basis ?? '',
     regulatory_docs: res.data.regulatory_docs ?? '',
     check_type: res.data.check_type ?? '',
+    validity_years_override: res.data.validity_years_override ?? null,
   })
 }
 
@@ -415,15 +451,19 @@ onMounted(async () => {
 })
 
 // When picking a training type on a brand-new protocol, prefill order
-// number/date/legal basis from that type's defaults — only if the admin
-// hasn't already typed something in, and never on an existing protocol.
+// number/date/legal basis from that type's defaults — overwriting whatever
+// was there before (switching from one type to another should re-fill
+// these with the new type's values, not leave the previous type's basis
+// behind). Never touches an existing protocol.
 function applyTrainingTypeDefaults() {
   if (!isNew.value) return
   const tt = trainingTypes.value.find(t => t.id === form.value.training_type_id)
-  if (!tt) return
-  if (!form.value.order_number && tt.default_order_number) form.value.order_number = tt.default_order_number
-  if (!form.value.order_date && tt.default_order_date) form.value.order_date = tt.default_order_date
-  if (!form.value.legal_basis && tt.default_legal_basis) form.value.legal_basis = tt.default_legal_basis
+  form.value.order_number = tt?.default_order_number || ''
+  form.value.order_date = tt?.default_order_date || ''
+  form.value.legal_basis = tt?.default_legal_basis || ''
+  // The рабочий/ИТР (or с отрывом/без отрыва) choice is specific to the
+  // previously selected type — force a fresh pick for the new one.
+  form.value.validity_years_override = null
 }
 
 async function saveMainForm() {

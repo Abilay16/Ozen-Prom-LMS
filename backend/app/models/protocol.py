@@ -57,6 +57,11 @@ class Protocol(Base):
     check_type: Mapped[Optional["CheckType"]] = mapped_column(
         SAEnum(CheckType, name="checktype"), nullable=True
     )
+    # Overrides training_type.validity_years for this protocol's certificates.
+    # БиОТ/ПромБез: 1 year for рабочие, 3 years for ИТР. ПТМ: 3 years with
+    # отрыв от производства, 1 year without. NULL falls back to the
+    # training type's own default (e.g. ЭлБез, which has no such split).
+    validity_years_override: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[ProtocolStatus] = mapped_column(
         SAEnum(ProtocolStatus, name="protocolstatus"), default=ProtocolStatus.draft
     )
