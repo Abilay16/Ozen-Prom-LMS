@@ -55,7 +55,7 @@
               <label class="block text-xs text-gray-500 mb-1">Дата приказа</label>
               <input v-model="form.order_date" type="date" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50" />
             </div>
-            <div class="sm:col-span-2">
+            <div v-if="selectedTrainingType?.code !== 'biot'" class="sm:col-span-2">
               <label class="block text-xs text-gray-500 mb-1">Основание (ст. закона)</label>
               <input v-model="form.legal_basis" type="text" :disabled="!isDraft" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50" placeholder='Напр. "на основании ст 79 РК «О Гражданской защите»"' />
             </div>
@@ -460,7 +460,9 @@ function applyTrainingTypeDefaults() {
   const tt = trainingTypes.value.find(t => t.id === form.value.training_type_id)
   form.value.order_number = tt?.default_order_number || ''
   form.value.order_date = tt?.default_order_date || ''
-  form.value.legal_basis = tt?.default_legal_basis || ''
+  // БиОТ's printed protocol builds its own basis sentence from order
+  // number/date directly — "Основание" isn't shown or used for it.
+  form.value.legal_basis = tt?.code === 'biot' ? '' : (tt?.default_legal_basis || '')
   // The рабочий/ИТР (or с отрывом/без отрыва) choice is specific to the
   // previously selected type — force a fresh pick for the new one.
   form.value.validity_years_override = null
