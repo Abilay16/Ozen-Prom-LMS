@@ -2,7 +2,7 @@ import uuid
 import enum
 from datetime import datetime, timezone, date
 
-from sqlalchemy import String, ForeignKey, DateTime, Date, Text, Integer
+from sqlalchemy import String, ForeignKey, DateTime, Date, Text, Integer, Boolean
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
@@ -109,6 +109,12 @@ class ProtocolCommissionMember(Base):
     signer_cert_owner: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)   # ФИО из CN
     signer_cert_valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     signer_cert_valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True only when the signature bytes were cryptographically verified
+    # against the real НУЦ РК root chain (RSA certs). False/NULL for GOST
+    # certs (no available library can verify Kazakhstan's GOST OID variant
+    # — see app/utils/eds_verify.py) or signatures made before this check
+    # existed — those only had name+expiry checked, never crypto-verified.
+    signer_crypto_verified: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     protocol: Mapped["Protocol"] = relationship("Protocol", back_populates="commission_members")
     admin_user: Mapped[Optional["AdminUser"]] = relationship("AdminUser", foreign_keys=[admin_user_id])  # noqa

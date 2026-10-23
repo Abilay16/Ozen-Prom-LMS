@@ -23,8 +23,20 @@ from uuid import uuid4
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
-# ЭЦП is mandatory on /sign — matches make_admin()'s default full_name.
-TEST_CMS_DEFAULT = make_fresh_cms_b64("Test Admin")
+
+async def _sign(http, token, protocol, cn="Test Admin"):
+    """Fetch the protocol's real signature payload and sign exactly that
+    with a fresh self-signed test cert (CN=cn), then POST /sign — needed so
+    the real messageDigest/chain check in eds_verify.py passes."""
+    payload_resp = await http.get(
+        f"/api/v1/admin/protocols/{protocol.id}/signature-payload", headers=auth(token),
+    )
+    payload = payload_resp.json()["payload"].encode("utf-8")
+    cms = make_fresh_cms_b64(cn, payload=payload)
+    return await http.post(
+        f"/api/v1/admin/protocols/{protocol.id}/sign",
+        headers=auth(token), json={"cms": cms},
+    )
 
 
 async def _protocol_awaiting_with_participants(db, results: list[ParticipantResult | None]):
@@ -63,10 +75,7 @@ async def test_sign_auto_issues_cert_for_passed_participant(http, db):
         db, [ParticipantResult.passed]
     )
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign", headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol)
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -81,10 +90,7 @@ async def test_sign_does_not_issue_cert_for_failed_participant(http, db):
         db, [ParticipantResult.passed, ParticipantResult.failed]
     )
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign", headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol)
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -98,10 +104,7 @@ async def test_sign_does_not_issue_cert_for_result_none(http, db):
         db, [ParticipantResult.passed, None]
     )
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign", headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol)
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -115,10 +118,7 @@ async def test_sign_issues_certs_for_all_passed_participants(http, db):
         db, [ParticipantResult.passed, ParticipantResult.passed, ParticipantResult.passed]
     )
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign", headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol)
 
     assert resp.status_code == 200, resp.text
     participants = resp.json()["participants"]
@@ -137,10 +137,7 @@ async def test_manual_issue_certs_is_idempotent_after_auto_issue(http, db):
     )
 
     # Sign → auto-issue
-    sign_resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign", headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    sign_resp = await _sign(http, token, protocol)
     assert sign_resp.status_code == 200
     assert sign_resp.json()["status"] == "signed"
 

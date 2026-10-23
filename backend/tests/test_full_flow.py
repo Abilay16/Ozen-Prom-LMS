@@ -50,9 +50,21 @@ from tests.conftest import (
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
-# ЭЦП is mandatory on /sign (see SignRequest.cms in app/api/v1/protocols.py) —
-# every signing test below needs a CMS whose CN matches the signer's full_name.
-TEST_CMS_DEFAULT = make_fresh_cms_b64("Test Admin")  # matches make_admin()'s default full_name
+
+async def _sign(http, token, protocol, cn):
+    """Fetch the protocol's real signature payload and sign exactly that
+    with a fresh self-signed test cert (CN=cn), then POST /sign — needed so
+    the real messageDigest/chain check in eds_verify.py passes, instead of
+    reusing a CMS that signed different (or placeholder) bytes."""
+    payload_resp = await http.get(
+        f"/api/v1/admin/protocols/{protocol.id}/signature-payload", headers=auth(token),
+    )
+    payload = payload_resp.json()["payload"].encode("utf-8")
+    cms = make_fresh_cms_b64(cn, payload=payload)
+    return await http.post(
+        f"/api/v1/admin/protocols/{protocol.id}/sign",
+        headers=auth(token), json={"cms": cms},
+    )
 
 
 async def _make_awaiting_single_member(db):
@@ -303,11 +315,7 @@ async def test_single_member_sign_sets_signed(http, db):
     """Single member (no chair) signs with CMS → protocol becomes signed."""
     admin, token, protocol = await _make_awaiting_single_member(db)
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol, admin.full_name)
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "signed"
@@ -316,17 +324,9 @@ async def test_single_member_sign_sets_signed(http, db):
 async def test_cannot_sign_twice(http, db):
     """Signing a second time → 409."""
     admin, token, protocol = await _make_awaiting_single_member(db)
-    await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    await _sign(http, token, protocol, admin.full_name)
 
-    resp2 = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp2 = await _sign(http, token, protocol, admin.full_name)
 
     assert resp2.status_code == 409, resp2.text
 
@@ -340,7 +340,7 @@ async def test_non_commission_member_cannot_sign(http, db):
     resp = await http.post(
         f"/api/v1/admin/protocols/{protocol.id}/sign",
         headers=auth(outsider_token),
-        json={"cms": TEST_CMS_DEFAULT},
+        json={"cms": make_fresh_cms_b64("Test Admin")},
     )
 
     assert resp.status_code == 403, resp.text
@@ -381,20 +381,12 @@ async def test_full_chair_member_flow(http, db):
     await db.commit()
 
     # Member signs first
-    r1 = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(member_token),
-        json={"cms": make_fresh_cms_b64("Член Тест")},
-    )
+    r1 = await _sign(http, member_token, protocol, "Член Тест")
     assert r1.status_code == 200, r1.text
     assert r1.json()["status"] == "awaiting_signatures"  # not yet signed
 
     # Chair signs last → becomes signed
-    r2 = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(chair_token),
-        json={"cms": make_fresh_cms_b64("Председатель Тест")},
-    )
+    r2 = await _sign(http, chair_token, protocol, "Председатель Тест")
     assert r2.status_code == 200, r2.text
     assert r2.json()["status"] == "signed"
 
@@ -432,13 +424,7 @@ async def test_sign_with_fresh_matching_cms_succeeds(http, db):
     await db.flush()
     await db.commit()
 
-    fresh_cms = make_fresh_cms_b64(cn)
-
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": fresh_cms},
-    )
+    resp = await _sign(http, token, protocol, cn)
 
     assert resp.status_code == 200, resp.text
     member = next(
@@ -521,11 +507,7 @@ async def test_passed_participant_gets_certificate_after_signing(http, db):
     await db.flush()
     await db.commit()
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol, admin.full_name)
 
     assert resp.status_code == 200, resp.text
     passed = next(
@@ -540,11 +522,7 @@ async def test_failed_participant_gets_no_certificate(http, db):
     await _add_participant(db, protocol, result=ParticipantResult.failed)
     await db.commit()
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_DEFAULT},
-    )
+    resp = await _sign(http, token, protocol, admin.full_name)
 
     assert resp.status_code == 200, resp.text
     failed = next(

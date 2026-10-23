@@ -18,10 +18,6 @@ from tests.conftest import (
 # CN used in all CMS-based signing tests
 _TEST_CMS_CN = "TESTOV TEST TESTOVICH"
 
-# Fresh self-signed CMS valid for 10 years — generated once per session at import time.
-# Admin full_name must equal _TEST_CMS_CN so name-match check passes.
-TEST_CMS_B64 = make_fresh_cms_b64(_TEST_CMS_CN)
-
 # Original expired CMS (valid_to = 2024-04-25) — used only for expiry-check test.
 TEST_CMS_B64_EXPIRED = (
     "MIIFPQYJKoZIhvcNAQcCoIIFLjCCBSoCAQExDzANBglghkgBZQMEAgEFADAkBgkqhkiG9w0BBwGg"
@@ -53,6 +49,23 @@ TEST_CMS_B64_EXPIRED = (
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+async def _sign(http, token, protocol, cn=_TEST_CMS_CN):
+    """Fetch the protocol's real signature payload, sign exactly that with a
+    fresh self-signed test cert (CN=cn), and POST /sign. Mirrors what the
+    real frontend does (GET signature-payload -> NCALayer -> POST sign), so
+    it exercises the real messageDigest/chain checks in eds_verify.py
+    instead of reusing a stale CMS that signed different bytes."""
+    payload_resp = await http.get(
+        f"/api/v1/admin/protocols/{protocol.id}/signature-payload", headers=auth(token),
+    )
+    payload = payload_resp.json()["payload"].encode("utf-8")
+    cms = make_fresh_cms_b64(cn, payload=payload)
+    return await http.post(
+        f"/api/v1/admin/protocols/{protocol.id}/sign",
+        headers=auth(token), json={"cms": cms},
+    )
 
 
 async def _protocol_awaiting(db):
@@ -119,11 +132,7 @@ async def test_sign_with_cms_stores_cert_serial(http, db):
     """After signing with CMS, signer_cert_serial must be present in response."""
     admin, token, protocol = await _protocol_awaiting(db)
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_B64},
-    )
+    resp = await _sign(http, token, protocol)
 
     assert resp.status_code == 200, resp.text
     member = next(
@@ -138,11 +147,8 @@ async def test_sign_with_cms_stores_cert_owner(http, db):
     """signer_cert_owner must contain the CN from the certificate."""
     admin, token, protocol = await _protocol_awaiting(db)
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_B64},
-    )
+    resp = await _sign(http, token, protocol)
+    assert resp.status_code == 200, resp.text
 
     member = next(
         m for m in resp.json()["commission_members"]
@@ -157,11 +163,8 @@ async def test_sign_with_cms_stores_validity_dates(http, db):
     """signer_cert_valid_from and signer_cert_valid_to must be populated."""
     admin, token, protocol = await _protocol_awaiting(db)
 
-    resp = await http.post(
-        f"/api/v1/admin/protocols/{protocol.id}/sign",
-        headers=auth(token),
-        json={"cms": TEST_CMS_B64},
-    )
+    resp = await _sign(http, token, protocol)
+    assert resp.status_code == 200, resp.text
 
     member = next(
         m for m in resp.json()["commission_members"]

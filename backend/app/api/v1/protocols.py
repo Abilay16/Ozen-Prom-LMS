@@ -3,7 +3,7 @@ from uuid import UUID
 from typing import Optional
 from datetime import date, datetime, timezone
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,7 @@ from app.models.organization import Organization
 from app.models.batch import TrainingBatch
 from app.core.exceptions import NotFoundError, ConflictError
 from app.utils.cms_parser import parse_cms, CMSParseError
+from app.utils.eds_verify import verify_cms, EDSVerifyError
 from app.utils.name_utils import names_match
 
 router = APIRouter()
@@ -48,6 +49,7 @@ class CommissionMemberOut(BaseModel):
     signer_cert_owner: Optional[str] = None
     signer_cert_valid_from: Optional[datetime] = None
     signer_cert_valid_to: Optional[datetime] = None
+    signer_crypto_verified: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -462,28 +464,34 @@ async def request_signatures(protocol_id: UUID, db: DB, admin: CurrentSuperAdmin
 
 
 class SignRequest(BaseModel):
-    cms: str  # Base64 CMS from NCALayer — required, signing without EDS is not allowed
+    # Base64 CMS from NCALayer — required, signing without EDS is not allowed.
+    # min_length=1 matters: an empty string is still a valid `str` to Pydantic,
+    # and `if body.cms:` further down treats "" as falsy and silently skips
+    # every ЭЦП check — this closes that bypass at the schema level.
+    cms: str = Field(min_length=1)
 
 
-@router.get("/{protocol_id}/signature-payload")
-async def get_signature_payload(protocol_id: UUID, db: DB, admin: CurrentAdmin):
-    """
-    Return the canonical string that the signer must pass to NCALayer for signing.
-    Deterministic: same inputs always produce the same output.
-    """
-    protocol = await _get_protocol_or_404(protocol_id, db)
-    # Build a stable payload from immutable protocol fields
+def _build_signature_payload(protocol: Protocol) -> str:
+    """Canonical string the signer passes to NCALayer. Deterministic: same
+    inputs always produce the same output. Shared by signature-payload (what
+    we ask NCALayer to sign) and sign (what we re-derive to verify against),
+    so the two can never silently drift apart."""
     participant_part = "|".join(
         f"{p.full_name}:{p.result.value if p.result else 'none'}"
         for p in sorted(protocol.participants, key=lambda p: str(p.id))
     )
-    payload = (
+    return (
         f"PROTOCOL:{protocol.protocol_number}"
         f":{protocol.exam_date.isoformat()}"
         f":{str(protocol.id)}"
         f":{participant_part}"
     )
-    return {"payload": payload}
+
+
+@router.get("/{protocol_id}/signature-payload")
+async def get_signature_payload(protocol_id: UUID, db: DB, admin: CurrentAdmin):
+    protocol = await _get_protocol_or_404(protocol_id, db)
+    return {"payload": _build_signature_payload(protocol)}
 
 
 @router.post("/{protocol_id}/sign")
@@ -553,11 +561,31 @@ async def sign_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin,
                 ),
             )
 
+        # Real cryptographic verification: signature bytes + chain to the
+        # actual НУЦ РК root CA (RSA certs — GOST certs can't be math-
+        # verified here, see eds_verify.py docstring for why; those only
+        # get the structural chain check above plus name/expiry).
+        try:
+            payload_bytes = _build_signature_payload(protocol).encode("utf-8")
+            verify_result = verify_cms(body.cms, payload_bytes)
+        except EDSVerifyError as e:
+            raise HTTPException(status_code=422, detail=f"Не удалось проверить ЭЦП: {e}")
+
+        if verify_result.algorithm == "RSA" and not (verify_result.signature_valid and verify_result.chain_valid):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Криптографическая проверка ЭЦП не пройдена: "
+                    + "; ".join(verify_result.warnings or ["неизвестная ошибка проверки"])
+                ),
+            )
+
         my_slot.signature_cms = body.cms
         my_slot.signer_cert_serial = cert_info.serial
         my_slot.signer_cert_owner = cert_info.owner
         my_slot.signer_cert_valid_from = cert_info.valid_from
         my_slot.signer_cert_valid_to = cert_info.valid_to
+        my_slot.signer_crypto_verified = verify_result.crypto_verified and verify_result.signature_valid and verify_result.chain_valid
 
     # Finalize: chair signed, OR everyone signed (commission has no chair)
     has_chair = any(m.role == CommissionRole.chair for m in protocol.commission_members)

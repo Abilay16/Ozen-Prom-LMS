@@ -113,11 +113,19 @@ async def http(engine, clean_tables):
 
 # ── CMS generation helper ────────────────────────────────────────────────────
 
-def make_fresh_cms_b64(cn: str) -> str:
+def make_fresh_cms_b64(cn: str, payload: bytes = b"PROTOCOL TEST PAYLOAD") -> str:
     """
-    Generate a self-signed RSA-2048 CMS SignedData blob for testing.
-    The certificate CN is set to *cn* and is valid for 10 years from now.
-    Embedded (non-detached) so our cms_parser can extract the certificate.
+    Generate a self-signed RSA-2048 CMS SignedData blob for testing, signing
+    *payload* with CAdES-style signed attributes (so it exercises the same
+    code path as a real NCALayer signature — see eds_verify.py).
+
+    Since this is self-signed rather than chained to the real НУЦ РК root,
+    it also registers itself as the trusted chain in app.utils.eds_verify
+    for the duration of the test process, so sign_protocol's real
+    cryptographic chain check passes against it. Tests run sequentially
+    (no parallelism), so the "most recently generated cert is trusted"
+    swap is safe — it's only ever checked immediately after being set, by
+    the same test that just called this function.
     """
     key = _rsa.generate_private_key(public_exponent=65537, key_size=2048)
     now = _dt.datetime.now(_dt.timezone.utc)
@@ -139,10 +147,14 @@ def make_fresh_cms_b64(cn: str) -> str:
     )
     cms_der = (
         _pkcs7.PKCS7SignatureBuilder()
-        .set_data(b"PROTOCOL TEST PAYLOAD")
+        .set_data(payload)
         .add_signer(cert, key, _hashes.SHA256())
-        .sign(_ser.Encoding.DER, [])
+        .sign(_ser.Encoding.DER, [_pkcs7.PKCS7Options.NoCapabilities])
     )
+
+    from app.utils import eds_verify as _eds_verify
+    _eds_verify.RSA_TRUST_CHAIN[:] = [cert, cert]  # self-signed: trust it as its own whole chain
+
     return _b64.b64encode(cms_der).decode()
 
 
