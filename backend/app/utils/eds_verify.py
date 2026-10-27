@@ -157,7 +157,18 @@ def verify_cms(cms_b64_or_der, payload: bytes) -> VerifyResult:
     is_pss = "rsassa-pss" in (signer_info["signature_algorithm"]["algorithm"].native or "")
     signature = signer_info["signature"].native
 
-    pubkey_oid = leaf_asn1["tbs_certificate"]["subject_public_key_info"]["algorithm"]["algorithm"].dotted
+    # Read the OID via `cryptography` (backed by OpenSSL's generic ASN.1
+    # parser), NOT via asn1crypto's typed x509 structures: asn1crypto's
+    # PublicKeyInfo/PublicKeyAlgorithm classes try to resolve a spec for
+    # the *parameters* field as soon as ANY of their fields is touched —
+    # including just reading the algorithm OID — and that spec lookup is a
+    # dict keyed by known algorithm names. An OID it doesn't recognize
+    # (like Kazakhstan's GOST arc below) raises KeyError and crashes the
+    # whole signing request with a 500 instead of being handled as the
+    # "can't verify this" case it actually is. cryptography's OpenSSL-backed
+    # loader has no such problem — it only tries to build a Python key
+    # object when you call .public_key(), which we never do for GOST.
+    pubkey_oid = leaf.public_key_algorithm_oid.dotted_string
     is_gost = pubkey_oid.startswith(_GOST_OID_PREFIX)
 
     warnings: list[str] = []

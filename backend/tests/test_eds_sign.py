@@ -205,3 +205,58 @@ async def test_sign_with_garbage_cms_returns_422(http, db):
     )
 
     assert resp.status_code == 422, resp.text
+
+
+# ── 5. GOST certificate doesn't crash verify_cms (regression) ─────────────────
+
+def test_verify_cms_with_real_gost_cert_does_not_crash():
+    """
+    Regression test for a production 500: a CMS whose embedded certificate
+    uses Kazakhstan's national GOST OID (1.2.398.3.10.1.1.2.2, not the
+    Russian GOST OID tree) used to raise an uncaught KeyError deep inside
+    asn1crypto's typed x509 parsing the moment anything touched
+    subject_public_key_info — including just reading the algorithm OID to
+    decide "is this GOST?". Every real НУЦ РК GOST signer hit this on every
+    sign attempt. See app/utils/eds_verify.py's comment on `leaf.
+    public_key_algorithm_oid` for the fix (read the OID via `cryptography`,
+    not asn1crypto's PublicKeyInfo/PublicKeyAlgorithm classes).
+
+    Uses the real bundled НУЦ РК GOST issuing certificate, not a synthetic
+    one, so this fails again immediately if the fix ever regresses.
+    """
+    import base64
+    from asn1crypto import cms as acms, x509 as ax509, algos, core, pem
+    from app.utils.eds_verify import verify_cms, _CERTS_DIR
+    import os
+
+    with open(os.path.join(_CERTS_DIR, "nca_issuing_gost_2022.pem"), "rb") as f:
+        _, _, gost_cert_der = pem.unarmor(f.read())
+    leaf_cert = ax509.Certificate.load(gost_cert_der)
+
+    signer_info = acms.SignerInfo({
+        "version": "v1",
+        "sid": acms.SignerIdentifier({
+            "issuer_and_serial_number": acms.IssuerAndSerialNumber({
+                "issuer": leaf_cert.issuer,
+                "serial_number": leaf_cert.serial_number,
+            })
+        }),
+        "digest_algorithm": algos.DigestAlgorithm({"algorithm": "sha256"}),
+        "signature_algorithm": algos.SignedDigestAlgorithm({"algorithm": "sha256_rsa"}),
+        "signature": core.OctetString(b"\x00" * 64).dump(),
+    })
+    signed_data = acms.SignedData({
+        "version": "v1",
+        "digest_algorithms": acms.DigestAlgorithms([algos.DigestAlgorithm({"algorithm": "sha256"})]),
+        "encap_content_info": acms.ContentInfo({"content_type": "data", "content": b"test payload"}),
+        "certificates": acms.CertificateSet([acms.CertificateChoices({"certificate": leaf_cert})]),
+        "signer_infos": acms.SignerInfos([signer_info]),
+    })
+    content_info = acms.ContentInfo({"content_type": "signed_data", "content": signed_data})
+    cms_b64 = base64.b64encode(content_info.dump()).decode()
+
+    # Must not raise — that's the whole point of this test.
+    result = verify_cms(cms_b64, b"test payload")
+
+    assert result.algorithm == "GOST"
+    assert result.crypto_verified is False
