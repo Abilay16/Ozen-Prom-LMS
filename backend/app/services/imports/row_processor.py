@@ -103,7 +103,7 @@ class ImportRowProcessor:
                             select(UserCourseAssignment).where(
                                 UserCourseAssignment.user_id == existing.id,
                                 UserCourseAssignment.course_id == course.id,
-                            )
+                            ).limit(1)
                         )).scalar_one_or_none()
                         if not already:
                             self.db.add(UserCourseAssignment(
