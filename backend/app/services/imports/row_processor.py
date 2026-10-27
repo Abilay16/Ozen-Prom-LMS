@@ -87,7 +87,7 @@ class ImportRowProcessor:
             dup_q = select(User).where(User.normalized_full_name == norm_name)
             if org_id:
                 dup_q = dup_q.where(User.organization_id == org_id)
-            existing = (await self.db.execute(dup_q)).scalar_one_or_none()
+            existing = (await self.db.execute(dup_q.limit(1))).scalar_one_or_none()
 
             if existing:
                 self.db.add(ImportRow(
