@@ -244,6 +244,23 @@ const batchId = route.params.id
 
 const batch = ref(null)
 const batchStats = ref(null)
+
+function computeBatchStats(progress) {
+  const byUser = new Map()
+  for (const row of progress) {
+    const uid = row.user?.id
+    if (!uid) continue
+    if (!byUser.has(uid)) byUser.set(uid, [])
+    byUser.get(uid).push(row.status)
+  }
+  let passed = 0, inProgress = 0, assigned = 0
+  for (const statuses of byUser.values()) {
+    if (statuses.every(s => s === 'passed')) passed++
+    else if (statuses.some(s => s === 'in_progress' || s === 'passed' || s === 'failed')) inProgress++
+    else assigned++
+  }
+  return { total: byUser.size, passed, in_progress: inProgress, assigned }
+}
 const selectedFile = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -286,12 +303,7 @@ async function addUserManually() {
     // refresh stats if batch is completed
     try {
       const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
-      batchStats.value = {
-        total: progress.length,
-        passed: progress.filter(r => r.status === 'passed').length,
-        in_progress: progress.filter(r => r.status === 'in_progress').length,
-        assigned: progress.filter(r => r.status === 'assigned').length,
-      }
+      batchStats.value = computeBatchStats(progress)
     } catch {}
   } catch (err) {
     toast.error(apiErrorMessage(err))
@@ -306,12 +318,7 @@ onMounted(async () => {
   if (data.status === 'completed') {
     try {
       const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
-      batchStats.value = {
-        total: progress.length,
-        passed: progress.filter(r => r.status === 'passed').length,
-        in_progress: progress.filter(r => r.status === 'in_progress').length,
-        assigned: progress.filter(r => r.status === 'assigned').length,
-      }
+      batchStats.value = computeBatchStats(progress)
     } catch {}
   }
 })
@@ -358,12 +365,7 @@ async function confirmImport() {
       // Load stats
       try {
         const { data: progress } = await api.get('/admin/progress', { params: { batch_id: batchId, limit: 1000 } })
-        batchStats.value = {
-          total: progress.length,
-          passed: progress.filter(r => r.status === 'passed').length,
-          in_progress: progress.filter(r => r.status === 'in_progress').length,
-          assigned: progress.filter(r => r.status === 'assigned').length,
-        }
+        batchStats.value = computeBatchStats(progress)
       } catch {}
     }
   } catch (err) {
