@@ -1,11 +1,10 @@
-import uuid
 from uuid import UUID
 from typing import Optional
 from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
@@ -801,6 +800,21 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
     issued: list[str] = []
     skipped: list[str] = []
 
+    code = training_type.name_short.upper().replace(" ", "") if training_type else "CERT"
+    date_str = protocol.exam_date.strftime("%Y%m%d")
+    prefix = f"{code}-{date_str}-"
+    # The old scheme picked 4 random digits (str(uuid4().int)[:4]), which
+    # only has ~10,000 distinct values per training type per day — with the
+    # certificate_number column UNIQUE, a collision aborted the whole insert
+    # batch and turned certificate issuance into a 500. Use a running
+    # sequence per (training type, date) instead: deterministic, and the
+    # only way to ever collide is a concurrent issue for the same protocol,
+    # which the per-protocol admin workflow doesn't produce.
+    existing_count = (await db.execute(
+        select(func.count()).select_from(Certificate).where(Certificate.certificate_number.like(f"{prefix}%"))
+    )).scalar_one()
+    next_seq = existing_count + 1
+
     for participant in protocol.participants:
         if participant.result != ParticipantResult.passed:
             continue
@@ -808,10 +822,8 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
             skipped.append(str(participant.id))
             continue
 
-        code = training_type.name_short.upper().replace(" ", "") if training_type else "CERT"
-        date_str = protocol.exam_date.strftime("%Y%m%d")
-        seq = str(uuid.uuid4().int)[:4]
-        cert_number = f"{code}-{date_str}-{seq}"
+        cert_number = f"{prefix}{next_seq:04d}"
+        next_seq += 1
 
         issued_date = protocol.exam_date
         try:
