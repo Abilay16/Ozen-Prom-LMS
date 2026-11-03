@@ -141,8 +141,15 @@
 
         <!-- Participants card -->
         <div v-if="!isNew" class="bg-white rounded-xl shadow-sm p-5">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <h2 class="font-semibold text-gray-700">Участники ({{ protocol.participants.length }})</h2>
+            <input
+              v-if="protocol.participants.length > 0"
+              v-model="participantSearch"
+              type="text"
+              placeholder="Поиск по ФИО..."
+              class="border border-gray-300 rounded px-2 py-1.5 text-xs w-48"
+            />
             <div class="flex gap-2">
               <button
                 v-if="protocol.batch_id && protocol.status === 'draft' && !isCommission"
@@ -184,7 +191,10 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(p, i) in protocol.participants" :key="p.id" class="border-t border-gray-100">
+              <tr v-if="filteredParticipants.length === 0">
+                <td colspan="6" class="px-2 py-4 text-center text-gray-400">Никого не найдено</td>
+              </tr>
+              <tr v-for="(p, i) in filteredParticipants" :key="p.id" class="border-t border-gray-100">
                 <td class="px-2 py-2 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-2 py-2">{{ p.full_name }}</td>
                 <td class="px-2 py-2 text-gray-600">{{ p.position || '—' }}</td>
@@ -354,6 +364,14 @@ const batches = ref([])
 const commissionCandidates = ref([])
 const pageReady = ref(false)
 const saving = ref(false)
+const participantSearch = ref('')
+
+const filteredParticipants = computed(() => {
+  const list = protocol.value?.participants || []
+  const q = participantSearch.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(p => (p.full_name || '').toLowerCase().includes(q))
+})
 
 const form = ref({
   training_type_id: '',
