@@ -138,4 +138,25 @@ router.beforeEach((to, from, next) => {
   next()
 })
 
+router.afterEach(() => {
+  sessionStorage.removeItem('chunk_reload_once')
+})
+
+// After a deploy, old JS chunk hashes no longer exist on the server, so a
+// tab that's been open since before the deploy fails to dynamically import
+// a route's chunk (nginx falls back to serving index.html for the missing
+// file, which the browser then rejects as invalid JS). Reload once to pick
+// up the current build instead of leaving the user stuck on a dead page.
+router.onError((error) => {
+  const msg = error?.message || ''
+  const isChunkLoadError =
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg)
+  if (isChunkLoadError && !sessionStorage.getItem('chunk_reload_once')) {
+    sessionStorage.setItem('chunk_reload_once', '1')
+    window.location.reload()
+  }
+})
+
 export default router
