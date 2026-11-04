@@ -1,119 +1,494 @@
 <template>
-  <div class="min-h-screen bg-gray-100">
-
-    <div class="bg-blue-700 text-white px-4 py-4 text-center shadow print:hidden">
-      <div class="text-base font-bold tracking-widest">ÖZEN-PROM</div>
-      <div class="text-xs opacity-70 mt-0.5">Протокол проверки знаний</div>
+  <div v-if="loading" class="flex items-center justify-center min-h-screen text-gray-400">
+    Загрузка...
+  </div>
+  <div v-else-if="error" class="flex items-center justify-center min-h-screen text-red-500 text-center px-4">
+    {{ error }}
+  </div>
+  <div v-else class="print-page">
+    <!-- Print bar (hidden when printing) -->
+    <div class="no-print flex gap-3 p-4 bg-gray-100 border-b">
+      <router-link :to="`/verify/${route.params.id}`" class="text-sm text-gray-600 hover:text-gray-800">← К удостоверению</router-link>
+      <button @click="doPrint()" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700">🖨 Печать</button>
     </div>
 
-    <div v-if="loading" class="text-center py-16 text-gray-400 text-sm">Загрузка...</div>
+    <!-- Official protocol document (same layout as the admin print view, but
+         limited to the single participant this certificate belongs to — the
+         full participant list is never exposed on this public, unauthenticated
+         page, since anyone who scans one worker's QR would otherwise see every
+         other worker's name and exam result from the same protocol). -->
+    <div class="protocol-doc">
 
-    <div v-else-if="error" class="max-w-sm mx-auto px-4 py-6">
-      <div class="bg-white rounded-2xl shadow p-8 text-center">
-        <div class="text-5xl mb-4">❌</div>
-        <h2 class="text-xl font-bold text-red-600 mb-2">Не найдено</h2>
-        <p class="text-gray-500 text-sm">Протокол не найден.</p>
-      </div>
-    </div>
+      <!-- ════════════════════════════════════════════════ -->
+      <!-- ПромБез protocol template                        -->
+      <!-- ════════════════════════════════════════════════ -->
+      <template v-if="isPromBez">
 
-    <div v-else class="max-w-2xl mx-auto px-4 py-6">
-      <router-link :to="`/verify/${route.params.id}`" class="text-sm text-gray-500 hover:text-gray-700 print:hidden">← К удостоверению</router-link>
-
-      <div class="bg-white rounded-2xl shadow-sm p-6 mt-4">
-        <h1 class="text-lg font-bold text-gray-900 mb-1">Протокол № {{ p.protocol_number }}</h1>
-        <div class="text-sm text-gray-500 mb-4">от {{ formatDate(p.exam_date) }}</div>
-
-        <div v-if="p.organization_name" class="mb-3">
-          <div class="text-xs text-gray-400 mb-0.5">Организация</div>
-          <div class="text-sm text-gray-800">{{ p.organization_name }}</div>
-        </div>
-
-        <div v-if="p.order_number" class="mb-3">
-          <div class="text-xs text-gray-400 mb-0.5">Основание</div>
-          <div class="text-sm text-gray-800">
-            Приказ № {{ p.order_number }}<span v-if="p.order_date"> от {{ formatDate(p.order_date) }}</span>
+        <div class="text-center mb-4">
+          <div class="font-bold text-base uppercase">
+            ПРОТОКОЛ № {{ p.protocol_number }}
           </div>
         </div>
 
-        <div v-if="p.regulatory_docs" class="mb-3">
-          <div class="text-xs text-gray-400 mb-0.5">Нормативные документы</div>
-          <div class="text-sm text-gray-700 whitespace-pre-line">{{ p.regulatory_docs }}</div>
+        <div class="mb-4 text-sm border-b border-black pb-1">
+          {{ p.organization_name || '_______________________________________________' }}
         </div>
 
-        <hr class="my-4 border-gray-100">
+        <div class="mb-4 text-sm">
+          «{{ examDay }}» {{ examMonth }} {{ examYear }} года
+        </div>
 
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Комиссия</h2>
-        <div class="space-y-3 mb-4">
-          <div v-for="m in p.commission_members" :key="m.id" class="text-sm">
-            <div>
-              <span class="font-medium text-gray-800">{{ m.role === 'chair' ? 'Председатель' : 'Член комиссии' }}:</span>
-              {{ m.full_name }}
-              <span v-if="m.position_title" class="text-gray-500"> — {{ m.position_title }}</span>
-            </div>
-            <div v-if="m.signer_cert_serial" class="mt-1.5">
-              <SignatureStamp
-                :serial="m.signer_cert_serial"
-                :owner="m.signer_cert_owner"
-                :valid-from="m.signer_cert_valid_from"
-                :valid-to="m.signer_cert_valid_to"
-                :signed-at="m.signed_at"
-                compact
-              />
+        <div class="mb-4 text-sm">
+          <div class="font-semibold mb-1">Комиссия в составе:</div>
+          <div v-for="m in p.commission_members" :key="m.id" class="mb-1">
+            <span class="font-medium">{{ m.role === 'chair' ? 'Председатель:' : 'Член комиссии:' }}</span>
+            {{ m.full_name }}<span v-if="m.position_title"> – {{ m.position_title }}</span>
+          </div>
+          <div class="text-xs text-gray-400">Фамилия, имя, отчество (при его наличии)</div>
+        </div>
+
+        <div class="mb-4 text-sm leading-relaxed">
+          На основании статьи 79 Закона Республики Казахстан «О гражданской защите»
+          <span v-if="p.order_number || p.order_date">
+            и в соответствии с приказом<span v-if="p.order_number"> № {{ p.order_number }}</span><span v-if="p.order_date"> от «{{ orderDay }}» {{ orderMonth }} {{ orderYear }} года</span>
+          </span>
+          комиссия провела проверку знаний работников <span v-if="p.organization_name">{{ p.organization_name }}</span> методом
+          тестирования.<br><br>
+          В ходе тестирования были проверены знания работников требований промышленной безопасности в
+          соответствии со следующими нормативными правовыми актами и нормативно-техническими документами:
+          <ul class="list-none mt-2 mb-2">
+            <li>✓ Закон Республики Казахстан «О гражданской защите».</li>
+            <li>✓ Правила обеспечения промышленной безопасности для опасных производственных объектов нефтяной и газовой отраслей промышленности.</li>
+            <li>✓ Правила обеспечения промышленной безопасности при эксплуатации оборудования, работающего под давлением.</li>
+            <li>✓ Правила обеспечения промышленной безопасности при эксплуатации грузоподъёмных механизмов.</li>
+            <li>✓ Правила промышленной безопасности для опасных производственных объектов химической отрасли промышленности.</li>
+            <li>✓ Правила обеспечения промышленной безопасности при эксплуатации компрессорных станций.</li>
+            <li>✓ Правила обеспечения промышленной безопасности для опасных производственных объектов нефтехимической и нефтеперерабатывающей отраслей, нефтебаз и автозаправочных станций.</li>
+            <li>✓ Инструкция по безопасности при эксплуатации технологических трубопроводов.</li>
+            <li>✓ Требования по безопасности объектов систем газоснабжения.</li>
+          </ul>
+          По результатам проведённого тестирования комиссия оценила уровень знаний работников по вопросам
+          промышленной безопасности и установила соответствие их знаний требованиям, предъявляемым к
+          безопасному выполнению работ на опасных производственных объектах.
+        </div>
+
+        <div v-if="p.regulatory_docs" class="mb-4 text-xs">
+          <div v-for="(doc, i) in regulatoryDocsList" :key="i" class="ml-2">{{ i + 1 }}. {{ doc }}</div>
+        </div>
+
+        <table class="w-full text-xs border-collapse mb-6">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="border border-gray-700 px-2 py-2 text-center w-8">№ п./п.</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Фамилия, имя, отчество<br>(при его наличии)</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Должность</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Образование</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Заключение комиссии<br>(сдал, не сдал)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="p.participant" class="h-8">
+              <td class="border border-gray-700 px-2 py-2 text-center">1.</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.full_name }}</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.position || '' }}</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.education || '' }}</td>
+              <td class="border border-gray-700 px-2 py-2 text-center">
+                {{ p.participant.result === 'passed' ? 'сдал(а)' : p.participant.result === 'failed' ? 'не сдал(а)' : '' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="text-sm space-y-6">
+          <div v-for="m in p.commission_members" :key="'sig-' + m.id">
+            <div class="flex items-start gap-6">
+              <div class="min-w-[240px] font-medium shrink-0">
+                {{ m.role === 'chair' ? 'Председатель комиссии:' : 'Члены комиссии:' }}
+              </div>
+              <div class="flex-1">
+                <div v-if="m.signer_cert_serial" class="eds-stamp mb-1">
+                  <div class="eds-stamp-inner">
+                    <div class="eds-title">ДОКУМЕНТ ПОДПИСАН<br>ЭЛЕКТРОННОЙ ПОДПИСЬЮ</div>
+                    <div class="eds-line">Серия: {{ m.signer_cert_serial }}</div>
+                    <div class="eds-line">Владелец: {{ m.signer_cert_owner }}</div>
+                    <div class="eds-line" v-if="m.signer_cert_valid_from && m.signer_cert_valid_to">
+                      Срок: {{ fmtDate(m.signer_cert_valid_from) }} — {{ fmtDate(m.signer_cert_valid_to) }}
+                    </div>
+                    <div class="eds-line" v-if="m.signed_at">Подписано: {{ fmtDateTime(m.signed_at) }}</div>
+                  </div>
+                </div>
+                <div v-else class="signature-line"></div>
+                <div class="mt-1 text-gray-700">{{ initials(m.full_name) }}</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <hr class="my-4 border-gray-100" v-if="p.participant">
+        <div class="mt-8 text-xs text-gray-500 leading-snug border-t pt-3">
+          *Протокол содержит перечень всех законодательных и нормативных правовых актов,
+          которые отражают вопросы промышленной безопасности с учетом специфики
+          и отраслевой принадлежности обучаемой организации и всех видов специальностей
+          персонала, включенного в настоящий протокол.
+        </div>
 
-        <template v-if="p.participant">
-          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Результат проверки</h2>
-          <div class="space-y-2 text-sm">
-            <div><span class="text-gray-500">ФИО:</span> <strong>{{ p.participant.full_name }}</strong></div>
-            <div v-if="p.participant.position"><span class="text-gray-500">Должность:</span> {{ p.participant.position }}</div>
-            <div v-if="p.participant.education"><span class="text-gray-500">Образование:</span> {{ p.participant.education }}</div>
-            <div>
-              <span class="text-gray-500">Заключение:</span>
-              <span :class="p.participant.result === 'passed' ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'">
-                {{ p.participant.result === 'passed' ? 'сдал(а)' : 'не сдал(а)' }}
+      </template>
+
+      <!-- ════════════════════════════════════════════════ -->
+      <!-- ПТМ protocol template                            -->
+      <!-- ════════════════════════════════════════════════ -->
+      <template v-else-if="isPtm">
+
+        <div class="text-center mb-6">
+          <div class="font-bold text-base uppercase leading-snug">
+            ПРОТОКОЛ № {{ p.protocol_number }}
+          </div>
+          <div class="text-sm mt-1 leading-snug">
+            заседания квалификационной комиссии<br>
+            по проверке знаний по пожарной безопасности в объеме<br>
+            пожарно-технического минимума
+          </div>
+        </div>
+
+        <div class="mb-6 text-sm border-b border-black pb-1 min-h-[22px]">
+          {{ p.organization_name || '' }}
+        </div>
+
+        <div class="mb-4 text-sm leading-relaxed">
+          В соответствии с приказом (распоряжением)
+          <span v-if="p.order_number"> № {{ p.order_number }}</span>
+          <span v-if="p.order_date"> от «{{ orderDay }}» {{ orderMonth }} {{ orderYear }} г.</span>
+          квалификационная комиссия в составе:
+        </div>
+
+        <div class="mb-4 text-sm">
+          <div v-for="m in p.commission_members" :key="m.id" class="mb-2">
+            <div class="flex gap-2 items-baseline">
+              <span class="font-medium shrink-0 min-w-[200px]">
+                {{ m.role === 'chair' ? 'председатель' : 'член комиссии' }}
+              </span>
+              <span class="border-b border-black flex-1">
+                {{ m.full_name }}<span v-if="m.position_title">, {{ m.position_title }}</span>
               </span>
             </div>
           </div>
-        </template>
-      </div>
+        </div>
 
-      <div class="mt-4 text-center text-xs text-gray-400 print:hidden">
-        Данные проверены на портале Özen-Prom
-      </div>
+        <div class="mb-6 text-sm leading-relaxed">
+          «{{ examDay }}» {{ examMonth }} {{ examYear }} г. приняла экзамен по пожарной безопасности в
+          объеме пожарно-технического минимума и установила следующие результаты:
+        </div>
+
+        <table class="w-full text-xs border-collapse mb-6">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="border border-gray-700 px-1 py-2 text-center w-7">№ п/п</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Фамилия, имя, отчество<br>(при его наличии)</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Должность</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Организация<br>(цех, участок)</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Причина<br>обучения</th>
+              <th class="border border-gray-700 px-2 py-2 text-center">Отметка о проверке знаний<br>(прошел, не прошел)</th>
+              <th class="border border-gray-700 px-2 py-2 text-center w-14">Подпись</th>
+            </tr>
+            <tr class="text-center text-xs text-gray-500">
+              <th class="border border-gray-700 px-1 py-1">1</th>
+              <th class="border border-gray-700 px-1 py-1">2</th>
+              <th class="border border-gray-700 px-1 py-1">3</th>
+              <th class="border border-gray-700 px-1 py-1">4</th>
+              <th class="border border-gray-700 px-1 py-1">5</th>
+              <th class="border border-gray-700 px-1 py-1">6</th>
+              <th class="border border-gray-700 px-1 py-1">7</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="p.participant" class="h-8">
+              <td class="border border-gray-700 px-1 py-2 text-center">1</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.full_name }}</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.position || '' }}</td>
+              <td class="border border-gray-700 px-2 py-2">{{ p.participant.organization_name || p.organization_name || '' }}</td>
+              <td class="border border-gray-700 px-2 py-2 text-center">{{ checkTypeLabel || '' }}</td>
+              <td class="border border-gray-700 px-2 py-2 text-center">
+                {{ p.participant.result === 'passed' ? 'прошел(а)' : p.participant.result === 'failed' ? 'не прошел(а)' : '' }}
+              </td>
+              <td class="border border-gray-700 px-2 py-2"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="text-sm space-y-5 mt-4">
+          <div v-for="m in p.commission_members" :key="'sig-' + m.id">
+            <div class="flex items-start gap-6">
+              <div class="min-w-[240px] font-medium shrink-0">
+                {{ m.role === 'chair' ? 'Председатель комиссии' : 'Члены комиссии' }}
+              </div>
+              <div class="flex-1">
+                <div v-if="m.signer_cert_serial" class="eds-stamp mb-1">
+                  <div class="eds-stamp-inner">
+                    <div class="eds-title">ДОКУМЕНТ ПОДПИСАН<br>ЭЛЕКТРОННОЙ ПОДПИСЬЮ</div>
+                    <div class="eds-line">Серия: {{ m.signer_cert_serial }}</div>
+                    <div class="eds-line">Владелец: {{ m.signer_cert_owner }}</div>
+                    <div class="eds-line" v-if="m.signer_cert_valid_from && m.signer_cert_valid_to">
+                      Срок: {{ fmtDate(m.signer_cert_valid_from) }} — {{ fmtDate(m.signer_cert_valid_to) }}
+                    </div>
+                    <div class="eds-line" v-if="m.signed_at">Подписано: {{ fmtDateTime(m.signed_at) }}</div>
+                  </div>
+                </div>
+                <div v-else class="signature-line"></div>
+                <div class="mt-1 text-gray-700">{{ m.full_name }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 text-sm">
+          «{{ examDay }}» {{ examMonth }} {{ examYear }} г.
+        </div>
+
+      </template>
+
+      <!-- ════════════════════════════════════════════════ -->
+      <!-- БиОТ / default protocol template                 -->
+      <!-- ════════════════════════════════════════════════ -->
+      <template v-else>
+
+        <div class="text-center mb-6">
+          <div class="font-bold text-base uppercase leading-snug">
+            ПРОТОКОЛ № {{ p.protocol_number }}
+          </div>
+          <div class="text-sm mt-1">
+            заседания экзаменационной комиссии по проверке знаний {{ protocolSubtitle }}
+          </div>
+          <div class="text-sm mt-2">
+            «{{ examDay }}» {{ examMonth }} {{ examYear }} г.
+          </div>
+        </div>
+
+        <div class="mb-4 text-sm">
+          <div v-for="m in p.commission_members" :key="m.id" class="mb-3">
+            <div class="flex gap-2 items-start">
+              <span class="shrink-0 font-medium min-w-[220px]">
+                {{ m.role === 'chair' ? 'Председатель комиссии:' : 'Член комиссии:' }}
+              </span>
+              <span>{{ m.full_name }}<span v-if="m.position_title"> – {{ m.position_title }}</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="p.order_number || checkTypeLabel" class="mb-4 text-sm leading-relaxed border-l-4 border-gray-300 pl-3">
+          На основании приказа
+          <span v-if="p.order_date"> от «{{ orderDay }}» {{ orderMonth }} {{ orderYear }} года</span>
+          <span v-if="p.order_number"> № {{ p.order_number }}</span>
+          приняла экзамен и установила:
+          <span v-if="checkTypeLabel" class="font-semibold italic">{{ checkTypeLabel }}</span>
+          вид проверки знаний.
+        </div>
+
+        <div v-if="p.regulatory_docs" class="mb-4 text-sm">
+          <div class="font-medium mb-1">Нормативные документы:</div>
+          <div v-for="(doc, i) in regulatoryDocsList" :key="i" class="ml-4">{{ i + 1 }}. {{ doc }}</div>
+        </div>
+
+        <table class="w-full text-xs border-collapse mb-6">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="border border-gray-400 px-2 py-1 text-center w-8">№</th>
+              <th class="border border-gray-400 px-2 py-1 text-left">ФИО</th>
+              <th class="border border-gray-400 px-2 py-1 text-left">Организация</th>
+              <th class="border border-gray-400 px-2 py-1 text-left">Должность</th>
+              <th class="border border-gray-400 px-2 py-1 text-center">Отметка о проверке знаний</th>
+              <th class="border border-gray-400 px-2 py-1 text-center">Примечание</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="p.participant">
+              <td class="border border-gray-400 px-2 py-1 text-center">1</td>
+              <td class="border border-gray-400 px-2 py-1">{{ p.participant.full_name }}</td>
+              <td class="border border-gray-400 px-2 py-1">{{ p.participant.organization_name || '' }}</td>
+              <td class="border border-gray-400 px-2 py-1">{{ p.participant.position || '' }}</td>
+              <td class="border border-gray-400 px-2 py-1 text-center">
+                {{ p.participant.result === 'passed' ? 'Прошёл(а)' : p.participant.result === 'failed' ? 'Не прошёл(а)' : '' }}
+              </td>
+              <td class="border border-gray-400 px-2 py-1"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="text-sm space-y-6">
+          <div v-for="m in p.commission_members" :key="'sig-' + m.id">
+            <div class="flex items-start gap-6">
+              <div class="min-w-[220px] font-medium shrink-0">
+                {{ m.role === 'chair' ? 'Председатель комиссии' : 'Член комиссии' }}
+              </div>
+              <div class="flex-1">
+                <div v-if="m.signer_cert_serial" class="eds-stamp mb-1">
+                  <div class="eds-stamp-inner">
+                    <div class="eds-title">ДОКУМЕНТ ПОДПИСАН<br>ЭЛЕКТРОННОЙ ПОДПИСЬЮ</div>
+                    <div class="eds-line">Серия: {{ m.signer_cert_serial }}</div>
+                    <div class="eds-line">Владелец: {{ m.signer_cert_owner }}</div>
+                    <div class="eds-line" v-if="m.signer_cert_valid_from && m.signer_cert_valid_to">
+                      Срок: {{ fmtDate(m.signer_cert_valid_from) }} — {{ fmtDate(m.signer_cert_valid_to) }}
+                    </div>
+                    <div class="eds-line" v-if="m.signed_at">Подписано: {{ fmtDateTime(m.signed_at) }}</div>
+                  </div>
+                </div>
+                <div v-else class="signature-line"></div>
+                <div class="mt-1 text-gray-700">{{ initials(m.full_name) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </template>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/services/api'
-import SignatureStamp from '@/components/SignatureStamp.vue'
 
 const route = useRoute()
 const p = ref(null)
 const loading = ref(true)
-const error = ref(false)
+const error = ref('')
 
 onMounted(async () => {
   try {
-    const res = await api.get(`/verify/${route.params.id}/protocol`)
-    p.value = res.data
-  } catch {
-    error.value = true
+    const { data } = await api.get(`/verify/${route.params.id}/protocol`)
+    p.value = data
+  } catch (e) {
+    error.value = e.response?.data?.detail || 'Протокол не найден'
   } finally {
     loading.value = false
   }
 })
 
-function formatDate(d) {
-  if (!d) return '—'
-  return new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  })
+const MONTHS = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+]
+
+function parseDateParts(d) {
+  if (!d) return {}
+  const dt = new Date(d + 'T00:00:00')
+  return { day: String(dt.getDate()).padStart(2, '0'), month: MONTHS[dt.getMonth()], year: dt.getFullYear() }
+}
+
+const examDay = computed(() => parseDateParts(p.value?.exam_date).day)
+const examMonth = computed(() => parseDateParts(p.value?.exam_date).month)
+const examYear = computed(() => parseDateParts(p.value?.exam_date).year)
+
+const orderDay = computed(() => parseDateParts(p.value?.order_date).day)
+const orderMonth = computed(() => parseDateParts(p.value?.order_date).month)
+const orderYear = computed(() => parseDateParts(p.value?.order_date).year)
+
+const regulatoryDocsList = computed(() =>
+  (p.value?.regulatory_docs || '').split('\n').map(s => s.trim()).filter(Boolean)
+)
+
+const SUBTITLE_MAP = {
+  biot:    'по безопасности и охране труда работников по курсу «Безопасность и охрана труда» в соответствии с их профессиями',
+  ptm:     'по пожарно-техническому минимуму',
+  prombez: 'по промышленной безопасности',
+  elektro: 'по электробезопасности',
+}
+const protocolSubtitle = computed(() => SUBTITLE_MAP[p.value?.training_type_code] || '')
+
+const isPromBez = computed(() => p.value?.training_type_code === 'prombez')
+const isPtm = computed(() => p.value?.training_type_code === 'ptm')
+
+// check_type already comes through as the Russian label (e.g. "периодический")
+const checkTypeLabel = computed(() => p.value?.check_type || '')
+
+function initials(fullName) {
+  if (!fullName) return ''
+  const parts = fullName.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0]
+  return parts[0] + ' ' + parts.slice(1).map(n => n[0] + '.').join('')
+}
+
+function fmtDate(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function fmtDateTime(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function doPrint() {
+  window.print()
 }
 </script>
+
+<style scoped>
+.print-page {
+  font-family: 'Times New Roman', serif;
+  font-size: 12pt;
+  color: #000;
+}
+
+.protocol-doc {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 60px;
+  background: #fff;
+}
+
+.signature-line {
+  display: inline-block;
+  width: 180px;
+  border-bottom: 1px solid #000;
+  height: 28px;
+  vertical-align: bottom;
+}
+
+.eds-stamp {
+  display: inline-block;
+}
+
+.eds-stamp-inner {
+  border: 2px solid #16a34a;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 8pt;
+  color: #15803d;
+  max-width: 280px;
+}
+
+.eds-title {
+  font-weight: bold;
+  font-size: 8pt;
+  text-align: center;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.eds-line {
+  font-size: 7.5pt;
+  line-height: 1.4;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page {
+    margin: 0;
+    padding: 0;
+  }
+
+  .protocol-doc {
+    padding: 20mm 20mm;
+    max-width: 100%;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
+</style>
