@@ -478,6 +478,7 @@ function applyTrainingTypeDefaults() {
   const tt = trainingTypes.value.find(t => t.id === form.value.training_type_id)
   form.value.order_number = tt?.default_order_number || ''
   form.value.order_date = tt?.default_order_date || ''
+  form.value.check_type = tt?.default_check_type || ''
   // БиОТ's printed protocol builds its own basis sentence from order
   // number/date directly — "Основание" isn't shown or used for it.
   form.value.legal_basis = tt?.code === 'biot' ? '' : (tt?.default_legal_basis || '')

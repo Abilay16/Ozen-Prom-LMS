@@ -1,10 +1,13 @@
 import uuid
 from datetime import date
+from typing import Optional
 
 from sqlalchemy import String, Boolean, Integer, Date, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.protocol import CheckType
 
 
 class TrainingType(Base):
@@ -24,3 +27,6 @@ class TrainingType(Base):
     default_order_number: Mapped[str | None] = mapped_column(String(100))
     default_order_date: Mapped[date | None] = mapped_column(Date)
     default_legal_basis: Mapped[str | None] = mapped_column(Text)
+    default_check_type: Mapped[Optional["CheckType"]] = mapped_column(
+        SAEnum(CheckType, name="checktype"), nullable=True
+    )

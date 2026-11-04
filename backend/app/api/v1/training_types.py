@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
 from app.models.training_type import TrainingType
+from app.models.protocol import CheckType
 
 router = APIRouter()
 
@@ -22,6 +23,7 @@ class TrainingTypeOut(BaseModel):
     default_order_number: Optional[str] = None
     default_order_date: Optional[date] = None
     default_legal_basis: Optional[str] = None
+    default_check_type: Optional[CheckType] = None
 
     class Config:
         from_attributes = True
@@ -42,6 +44,7 @@ class TrainingTypeUpdate(BaseModel):
     default_order_number: Optional[str] = None
     default_order_date: Optional[date] = None
     default_legal_basis: Optional[str] = None
+    default_check_type: Optional[CheckType] = None
 
 
 @router.get("", response_model=list[TrainingTypeOut])
