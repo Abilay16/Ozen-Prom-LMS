@@ -13,6 +13,7 @@ from app.models.certificate import Certificate
 from app.models.training_type import TrainingType
 from app.models.user import User
 from app.models.protocol import Protocol, ProtocolCommissionMember, ProtocolParticipant
+from app.models.user_document import UserDocument
 from app.core.exceptions import NotFoundError
 
 router = APIRouter()          # mounted at /admin/certificates
@@ -230,6 +231,13 @@ async def verify_worker(token: uuid.UUID, db: DB):
     )
     certs = certs_q.scalars().all()
 
+    docs_q = await db.execute(
+        select(UserDocument)
+        .where(UserDocument.user_id == user.id)
+        .order_by(UserDocument.uploaded_at.desc())
+    )
+    docs = docs_q.scalars().all()
+
     return {
         "full_name": user.full_name,
         "organization_name": user.organization.name if user.organization else None,
@@ -247,7 +255,44 @@ async def verify_worker(token: uuid.UUID, db: DB):
             }
             for c in certs
         ],
+        # Scans/other documents the worker uploaded themselves (e.g. an
+        # электробезопасность certificate issued outside this system) —
+        # shown on the same public card so an inspector scanning the QR
+        # sees everything in one place, not just system-issued certificates.
+        "documents": [
+            {
+                "id": d.id,
+                "title": d.title,
+                "original_filename": d.original_filename,
+                "mime_type": d.mime_type,
+                "uploaded_at": d.uploaded_at,
+            }
+            for d in docs
+        ],
     }
+
+
+@public_router.get("/verify/documents/{doc_id}/download")
+async def download_worker_document(doc_id: uuid.UUID, db: DB):
+    """Public download for a worker-uploaded document shown on the worker
+    card — same no-login-required model as certificate verification itself;
+    the id is an unguessable UUID, not an index."""
+    import os
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    result = await db.execute(select(UserDocument).where(UserDocument.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise NotFoundError("Документ не найден")
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(404, "Файл не найден на сервере")
+
+    return FileResponse(
+        doc.file_path,
+        media_type=doc.mime_type or "application/octet-stream",
+        filename=doc.original_filename,
+    )
 
 
 @public_router.get("/verify/{cert_id}")

@@ -119,6 +119,29 @@
         </div>
       </div>
 
+      <!-- Other uploaded documents -->
+      <div v-if="worker.documents && worker.documents.length > 0">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest px-1 mb-2">
+          Прочие документы ({{ worker.documents.length }})
+        </h2>
+        <div class="space-y-2">
+          <a
+            v-for="d in worker.documents"
+            :key="d.id"
+            :href="docDownloadUrl(d.id)"
+            target="_blank"
+            class="flex items-center bg-white rounded-2xl p-4 shadow-sm border-l-4 border-blue-300 active:bg-gray-50 transition-colors"
+          >
+            <div class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-blue-50 mr-3">📎</div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-gray-800 truncate">{{ d.title }}</div>
+              <div class="text-xs text-gray-400 mt-0.5 truncate">{{ d.original_filename }} &middot; {{ formatDate(d.uploaded_at) }}</div>
+            </div>
+            <div class="ml-2 text-gray-300 text-lg">⬇</div>
+          </a>
+        </div>
+      </div>
+
       <!-- Footer -->
       <div class="text-center text-xs text-gray-400 pt-2 pb-4">
         Özen-Prom · Нажмите на удостоверение для подробной проверки
@@ -163,5 +186,9 @@ function statusLabel(s) {
 
 function countByStatus(s) {
   return worker.value?.certificates.filter(c => c.status === s).length ?? 0
+}
+
+function docDownloadUrl(docId) {
+  return `/api/v1/verify/documents/${docId}/download`
 }
 </script>
