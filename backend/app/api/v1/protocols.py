@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
@@ -806,14 +806,26 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
     # The old scheme picked 4 random digits (str(uuid4().int)[:4]), which
     # only has ~10,000 distinct values per training type per day — with the
     # certificate_number column UNIQUE, a collision aborted the whole insert
-    # batch and turned certificate issuance into a 500. Use a running
-    # sequence per (training type, date) instead: deterministic, and the
-    # only way to ever collide is a concurrent issue for the same protocol,
-    # which the per-protocol admin workflow doesn't produce.
-    existing_count = (await db.execute(
-        select(func.count()).select_from(Certificate).where(Certificate.certificate_number.like(f"{prefix}%"))
-    )).scalar_one()
-    next_seq = existing_count + 1
+    # batch and turned certificate issuance into a 500. Replaced that with a
+    # running sequence per (training type, date) — but basing it on
+    # COUNT(*) of remaining rows turned out to have its own collision: if
+    # any certificate with that prefix is ever deleted (participant removed,
+    # or — as happened in production — a protocol deleted and recreated
+    # after fixing a participant's position), the count drops below the
+    # highest number actually issued so far, and the next batch's numbers
+    # walk straight back into a still-existing higher one from an earlier,
+    # unrelated protocol with the same training type + exam date. Use the
+    # highest existing numeric suffix instead of a row count, so deleted
+    # certificates leave gaps rather than reusable numbers.
+    existing_numbers = (await db.execute(
+        select(Certificate.certificate_number).where(Certificate.certificate_number.like(f"{prefix}%"))
+    )).scalars().all()
+    max_seq = 0
+    for num in existing_numbers:
+        suffix = num[len(prefix):]
+        if suffix.isdigit():
+            max_seq = max(max_seq, int(suffix))
+    next_seq = max_seq + 1
 
     for participant in protocol.participants:
         if participant.result != ParticipantResult.passed:
