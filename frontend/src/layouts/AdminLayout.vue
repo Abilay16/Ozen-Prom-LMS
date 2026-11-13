@@ -1,11 +1,12 @@
 <template>
-  <div class="min-h-screen flex bg-gray-50">
-    <!-- Sidebar -->
-    <aside class="w-64 bg-brand-dark text-white flex-shrink-0 hidden md:block">
-      <div class="h-16 flex items-center px-6 border-b border-white/10">
+  <div class="h-screen flex bg-gray-50 overflow-hidden">
+    <!-- Sidebar: fixed to the viewport, its own nav scrolls independently
+         so the logo/footer never scroll away with the page content. -->
+    <aside class="w-64 bg-brand-dark text-white shrink-0 hidden md:flex md:flex-col h-screen">
+      <div class="h-16 flex items-center px-6 border-b border-white/10 shrink-0">
         <span class="font-bold text-lg">Озен-Пром Admin</span>
       </div>
-      <nav class="p-4 space-y-1">
+      <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
         <!-- Read-only org-viewer menu -->
         <template v-if="isOrgViewer">
           <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
@@ -41,8 +42,9 @@
         </template>
       </nav>
 
-      <!-- User info at bottom -->
-      <div class="absolute bottom-0 w-64 p-4 border-t border-white/10">
+      <!-- User info footer — pinned to the bottom of the sidebar via flex,
+           not absolute positioning, so it never overlaps a long nav list. -->
+      <div class="p-4 border-t border-white/10 shrink-0">
         <div class="text-sm text-gray-300">{{ fullName }}</div>
         <div v-if="isCommission" class="text-xs text-blue-300 mt-0.5">Член комиссии</div>
         <div v-if="isOrgViewer" class="text-xs text-blue-300 mt-0.5">Просмотр по организации</div>
