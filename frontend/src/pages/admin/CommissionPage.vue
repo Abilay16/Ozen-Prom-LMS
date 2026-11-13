@@ -14,7 +14,7 @@
       ℹ️ Вы просматриваете состав комиссии в режиме чтения.
     </div>
 
-    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+    <RowsSkeleton v-if="loading" />
 
     <div v-else class="card overflow-x-auto">
       <table class="w-full text-sm">
@@ -76,6 +76,7 @@
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
 const isCommission = localStorage.getItem('is_commission') === '1'

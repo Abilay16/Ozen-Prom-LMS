@@ -26,7 +26,7 @@
       </template>
     </Modal>
 
-    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+    <RowsSkeleton v-if="loading" />
 
     <div v-else-if="!disciplines.length" class="text-center py-16 text-gray-400">
       <div class="text-4xl mb-2">🏷️</div>
@@ -71,6 +71,7 @@ import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Modal from '@/components/Modal.vue'
 import Badge from '@/components/Badge.vue'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
 const { confirm } = useConfirm()

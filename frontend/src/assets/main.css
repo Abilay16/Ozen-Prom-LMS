@@ -10,20 +10,58 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-brand-mid hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-brand-mid hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.05);
   }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px -2px rgba(37,99,235,0.35); }
+  .btn-primary:active:not(:disabled) { transform: translateY(0); }
+
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg border border-gray-300 transition-colors duration-200;
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-lg border border-gray-300 transition-all duration-150;
   }
+  .btn-secondary:hover { transform: translateY(-1px); box-shadow: 0 2px 8px -2px rgba(16,24,40,0.1); }
+  .btn-secondary:active { transform: translateY(0); }
+
   .input-field {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow duration-150;
   }
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6 transition-shadow duration-200;
   }
   .badge-assigned  { @apply bg-blue-100  text-blue-800  text-xs font-medium px-2.5 py-0.5 rounded-full; }
   .badge-passed    { @apply bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full; }
   .badge-failed    { @apply bg-red-100   text-red-800   text-xs font-medium px-2.5 py-0.5 rounded-full; }
   .badge-progress  { @apply bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full; }
   .badge-neutral   { @apply bg-gray-100  text-gray-600  text-xs font-medium px-2.5 py-0.5 rounded-full; }
+
+  /* Table rows: every admin list table uses hover:bg-gray-50 already —
+     give the hover a transition instead of snapping, and fade rows in
+     on first render instead of popping in all at once. */
+  tbody tr { transition: background-color 0.12s ease; }
+
+  /* Shared skeleton shimmer — swap literal "Загрузка..." text for this
+     wherever a list/table is loading, across every admin page. */
+  .skel {
+    display: block;
+    border-radius: 0.4rem;
+    background: linear-gradient(90deg, #eef1f5 25%, #f6f8fa 37%, #eef1f5 63%);
+    background-size: 400% 100%;
+    animation: skel-shimmer 1.4s ease infinite;
+  }
+  @keyframes skel-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skel { animation: none; }
+  }
+}
+
+/* Page-level transition when navigating between admin routes. */
+.page-fade-enter-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.page-fade-enter-from { opacity: 0; transform: translateY(4px); }
+.page-fade-leave-active { transition: opacity 0.1s ease; }
+.page-fade-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-enter-active, .page-fade-leave-active { transition: none; }
 }

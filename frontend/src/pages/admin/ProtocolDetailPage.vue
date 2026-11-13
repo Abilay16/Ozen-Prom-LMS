@@ -1,6 +1,6 @@
 <template>
-  <div v-if="!pageReady" class="flex items-center justify-center py-20 text-gray-400">
-    Загрузка...
+  <div v-if="!pageReady" class="max-w-3xl">
+    <RowsSkeleton :rows="6" />
   </div>
   <div v-else>
     <!-- Header -->
@@ -342,6 +342,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/services/api'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { signWithNcaLayer } from '@/services/ncaLayer'
 import SignatureStamp from '@/components/SignatureStamp.vue'

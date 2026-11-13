@@ -102,7 +102,7 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
           <tr v-if="loading">
-            <td colspan="10" class="text-center py-10 text-gray-400">Загрузка...</td>
+            <td colspan="10" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
           <tr v-else-if="filteredRecords.length === 0">
             <td colspan="10" class="text-center py-10 text-gray-400">Нет данных</td>
@@ -197,6 +197,7 @@ import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Modal from '@/components/Modal.vue'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 import Badge from '@/components/Badge.vue'
 
 const toast = useToast()

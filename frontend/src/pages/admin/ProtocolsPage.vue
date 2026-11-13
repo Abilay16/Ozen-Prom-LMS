@@ -42,7 +42,7 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="6" class="text-center py-8 text-gray-400">Загрузка...</td>
+            <td colspan="6" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
           <tr v-else-if="protocols.length === 0">
             <td colspan="6" class="text-center py-8 text-gray-400">Протоколов пока нет</td>
@@ -84,6 +84,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import Badge from '@/components/Badge.vue'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const isCommission = localStorage.getItem('is_commission') === '1'
 const protocols = ref([])

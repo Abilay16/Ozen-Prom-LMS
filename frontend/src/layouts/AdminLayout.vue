@@ -109,7 +109,11 @@
       </header>
 
       <main class="flex-1 p-6 overflow-auto">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <Transition name="page-fade" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
   </div>
@@ -139,8 +143,8 @@ const NavLink = (props, { slots }) => {
     {
       to: props.to,
       class: [
-        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-        isActive ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white',
+        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+        isActive ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5 hover:text-white hover:translate-x-0.5',
       ],
     },
     () => [h('span', props.icon), slots.default?.()]

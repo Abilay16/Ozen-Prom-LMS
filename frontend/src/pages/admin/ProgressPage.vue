@@ -81,7 +81,7 @@
             <td colspan="7" class="px-4 py-8 text-center text-gray-400">Нет данных</td>
           </tr>
           <tr v-if="loading">
-            <td colspan="7" class="px-4 py-8 text-center text-gray-400">Загрузка...</td>
+            <td colspan="7" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
         </tbody>
       </table>
@@ -94,6 +94,7 @@ import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Badge from '@/components/Badge.vue'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
 const { confirm } = useConfirm()

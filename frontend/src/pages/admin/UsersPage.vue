@@ -13,7 +13,7 @@
           <option value="all">Все</option>
         </select>
       </div>
-      <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+      <RowsSkeleton v-if="loading" />
       <div v-else class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
@@ -154,6 +154,7 @@ import { useToast, apiErrorMessage } from '@/composables/useToast'
 import Modal from '@/components/Modal.vue'
 import Badge from '@/components/Badge.vue'
 import { useConfirm } from '@/composables/useConfirm'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
 const { confirm } = useConfirm()

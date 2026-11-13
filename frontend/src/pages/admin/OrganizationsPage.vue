@@ -38,7 +38,7 @@
       </template>
     </Modal>
 
-    <div v-if="loading" class="text-gray-400 py-8 text-center">Загрузка...</div>
+    <RowsSkeleton v-if="loading" />
 
     <div v-else-if="!orgs.length" class="text-center py-16 text-gray-400">
       <div class="text-4xl mb-2">🏢</div>
@@ -80,6 +80,7 @@ import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import Modal from '@/components/Modal.vue'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
 const orgs = ref([])

@@ -29,7 +29,7 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" class="text-center py-8 text-gray-400">Загрузка...</td>
+            <td colspan="7" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
           <tr v-else-if="certs.length === 0">
             <td colspan="7" class="text-center py-8 text-gray-400">Удостоверений пока нет</td>
@@ -66,6 +66,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const certs = ref([])
 const trainingTypes = ref([])
