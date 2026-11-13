@@ -120,7 +120,16 @@
               <option value="learner">Обучаемый (слушатель)</option>
               <option value="admin">Администратор</option>
               <option value="commission">Админ + Член комиссии</option>
+              <option value="org_viewer">Просмотр по организации (только чтение)</option>
             </select>
+          </div>
+          <div v-if="!editing && form.role === 'org_viewer'" class="sm:col-span-2">
+            <label class="text-sm font-medium text-gray-700">Организация <span class="text-red-400">*</span></label>
+            <select v-model="form.org_viewer_organization_id" class="input-field mt-1">
+              <option value="">— выберите организацию —</option>
+              <option v-for="o in orgs" :key="o.id" :value="o.id">{{ o.name }}</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Этот аккаунт увидит только сотрудников, потоки, протоколы, удостоверения и прогресс выбранной организации. Без права создавать/редактировать.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -181,7 +190,7 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  form.value = { full_name: '', login: '', new_password: '', position_raw: '', education: '', organization_name: '', role: 'learner', is_active: true }
+  form.value = { full_name: '', login: '', new_password: '', position_raw: '', education: '', organization_name: '', role: 'learner', org_viewer_organization_id: '', is_active: true }
   modal.value = true
 }
 
@@ -202,6 +211,10 @@ function openEdit(u) {
 }
 
 async function save() {
+  if (!editing.value && form.value.role === 'org_viewer' && !form.value.org_viewer_organization_id) {
+    toast.error('Выберите организацию для аккаунта просмотра')
+    return
+  }
   saving.value = true
   try {
     if (editing.value) {
@@ -231,13 +244,15 @@ async function save() {
       const { data } = await api.post('/admin/users', payload)
       users.value.unshift(data)
     } else {
-      // Create admin / commission member
+      // Create admin / commission member / org viewer
       const payload = {
         full_name: form.value.full_name,
         login: form.value.login || undefined,
         password: form.value.new_password || undefined,
         position_title: form.value.position_raw || undefined,
         is_commission_eligible: form.value.role === 'commission',
+        is_org_viewer: form.value.role === 'org_viewer',
+        organization_id: form.value.role === 'org_viewer' ? form.value.org_viewer_organization_id : undefined,
       }
       await api.post('/admin/admin-users', payload)
       toast.success(`Администратор создан. Логин: ${form.value.login || '(см. в базе)'}`)

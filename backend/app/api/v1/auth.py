@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -25,6 +26,8 @@ class TokenResponse(BaseModel):
     user_id: str
     full_name: str
     is_commission: bool = False
+    is_org_viewer: bool = False
+    organization_id: Optional[str] = None
 
 
 class RefreshRequest(BaseModel):
@@ -42,6 +45,8 @@ async def login(body: LoginRequest, db: DB):
         admin_id = str(admin.id)
         admin_full_name = admin.full_name
         is_commission = admin.is_commission_eligible and not admin.is_superadmin
+        is_org_viewer = admin.is_org_viewer
+        org_id = str(admin.organization_id) if admin.organization_id else None
         admin.last_login = datetime.now(timezone.utc)
         await db.commit()
         access = create_access_token(admin_id, {"role": "admin"})
@@ -53,6 +58,8 @@ async def login(body: LoginRequest, db: DB):
             user_id=admin_id,
             full_name=admin_full_name,
             is_commission=is_commission,
+            is_org_viewer=is_org_viewer,
+            organization_id=org_id,
         )
 
     # Try learner (case-insensitive login)
@@ -101,6 +108,8 @@ async def refresh_token(body: RefreshRequest, db: DB):
             user_id=str(admin.id),
             full_name=admin.full_name,
             is_commission=is_commission,
+            is_org_viewer=admin.is_org_viewer,
+            organization_id=str(admin.organization_id) if admin.organization_id else None,
         )
 
     # Check learner

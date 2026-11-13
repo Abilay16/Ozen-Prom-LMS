@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const userId = ref(localStorage.getItem('user_id') || null)
   const fullName = ref(localStorage.getItem('full_name') || null)
   const isCommission = ref(localStorage.getItem('is_commission') === '1')
+  const isOrgViewer = ref(localStorage.getItem('is_org_viewer') === '1')
 
   const isAuthenticated = computed(() => !!accessToken.value)
 
@@ -20,6 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
     userId.value = data.user_id
     fullName.value = data.full_name
     isCommission.value = !!data.is_commission
+    isOrgViewer.value = !!data.is_org_viewer
 
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
@@ -27,6 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('user_id', data.user_id)
     localStorage.setItem('full_name', data.full_name)
     localStorage.setItem('is_commission', data.is_commission ? '1' : '0')
+    localStorage.setItem('is_org_viewer', data.is_org_viewer ? '1' : '0')
 
     return data
   }
@@ -52,5 +55,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { accessToken, refreshToken, role, userId, fullName, isCommission, isAuthenticated, login, logout, refresh }
+  return { accessToken, refreshToken, role, userId, fullName, isCommission, isOrgViewer, isAuthenticated, login, logout, refresh }
 })

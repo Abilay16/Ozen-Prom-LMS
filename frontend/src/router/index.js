@@ -108,10 +108,17 @@ const router = createRouter({
 // Pages that commission members are allowed to access
 const COMMISSION_ALLOWED = ['/admin/protocols', '/admin/commission', '/admin/certificates']
 
+// Pages a read-only org-viewer admin is allowed to access — everything else
+// under /admin (disciplines, courses, exports, admin-users, settings...)
+// isn't relevant to a single-organization read-only account, and the
+// backend rejects writes for this role anyway even if a link were reachable.
+const ORG_VIEWER_ALLOWED = ['/admin/dashboard', '/admin/users', '/admin/batches', '/admin/protocols', '/admin/certificates', '/admin/progress']
+
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('access_token')
   const role = localStorage.getItem('role')
   const isCommission = localStorage.getItem('is_commission') === '1'
+  const isOrgViewer = localStorage.getItem('is_org_viewer') === '1'
 
   // Guard: requires auth
   if (to.meta.requiresAuth) {
@@ -132,6 +139,18 @@ router.beforeEach((to, from, next) => {
     const allowed = COMMISSION_ALLOWED.some(p => to.path.startsWith(p))
     if (!allowed) {
       return next('/admin/protocols')
+    }
+  }
+
+  // Guard: org viewers only see their own organization's data, on a fixed
+  // set of read-only pages.
+  if (role === 'admin' && isOrgViewer && to.path.startsWith('/admin')) {
+    if (to.path === '/admin/protocols/new') {
+      return next('/admin/dashboard')
+    }
+    const allowed = ORG_VIEWER_ALLOWED.some(p => to.path.startsWith(p))
+    if (!allowed) {
+      return next('/admin/dashboard')
     }
   }
 

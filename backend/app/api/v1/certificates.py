@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, DB
+from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, org_scope_id, DB
 from app.models.certificate import Certificate
 from app.models.training_type import TrainingType
 from app.models.user import User
@@ -99,6 +99,11 @@ async def list_certificates(
         q = q.where(Certificate.training_type_id == training_type_id)
     if search:
         q = q.where(Certificate.full_name.ilike(f"%{search}%"))
+    # Certificates have no organization FK of their own — scope an org
+    # viewer via the issuing user's current organization.
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.join(User, Certificate.user_id == User.id).where(User.organization_id == org_id)
     q = q.offset(skip).limit(limit)
     result = await db.execute(q)
     return result.scalars().all()
@@ -137,6 +142,11 @@ async def get_certificate(cert_id: UUID, db: DB, admin: CurrentAdmin):
     cert = result.scalar_one_or_none()
     if not cert:
         raise NotFoundError("Удостоверение не найдено")
+    org_id = org_scope_id(admin)
+    if org_id:
+        owner = (await db.execute(select(User).where(User.id == cert.user_id))).scalar_one_or_none()
+        if not owner or owner.organization_id != org_id:
+            raise NotFoundError("Удостоверение не найдено")
     out = CertificateOut.model_validate(cert)
     out.photo_url = await _resolve_photo_url(db, cert.user_id)
     return out

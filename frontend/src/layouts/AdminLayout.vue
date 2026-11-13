@@ -6,8 +6,19 @@
         <span class="font-bold text-lg">Озен-Пром Admin</span>
       </div>
       <nav class="p-4 space-y-1">
+        <!-- Read-only org-viewer menu -->
+        <template v-if="isOrgViewer">
+          <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
+          <NavLink to="/admin/batches" icon="📂">Потоки обучения</NavLink>
+          <NavLink to="/admin/users" icon="👥">Сотрудники</NavLink>
+          <NavLink to="/admin/progress" icon="📈">Прогресс</NavLink>
+          <div class="border-t border-white/10 my-2"/>
+          <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
+          <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+        </template>
+
         <!-- Full admin menu -->
-        <template v-if="!isCommission">
+        <template v-else-if="!isCommission">
           <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
           <NavLink to="/admin/batches" icon="📂">Потоки обучения</NavLink>
           <NavLink to="/admin/users" icon="👥">Пользователи</NavLink>
@@ -23,15 +34,18 @@
         </template>
 
         <!-- Commission + protocols (visible to all admins) -->
-        <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
-        <NavLink to="/admin/commission" icon="👨‍⚖️">Комиссия</NavLink>
-        <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+        <template v-if="!isOrgViewer">
+          <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
+          <NavLink to="/admin/commission" icon="👨‍⚖️">Комиссия</NavLink>
+          <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+        </template>
       </nav>
 
       <!-- User info at bottom -->
       <div class="absolute bottom-0 w-64 p-4 border-t border-white/10">
         <div class="text-sm text-gray-300">{{ fullName }}</div>
         <div v-if="isCommission" class="text-xs text-blue-300 mt-0.5">Член комиссии</div>
+        <div v-if="isOrgViewer" class="text-xs text-blue-300 mt-0.5">Просмотр по организации</div>
         <button @click="handleLogout" class="text-xs text-red-300 hover:text-red-100 mt-1">Выйти</button>
       </div>
     </aside>
@@ -46,7 +60,16 @@
             <button @click="sidebarOpen = false" class="text-gray-300 hover:text-white text-xl">✕</button>
           </div>
           <nav class="p-4 space-y-1 flex-1 overflow-y-auto">
-            <template v-if="!isCommission">
+            <template v-if="isOrgViewer">
+              <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
+              <NavLink to="/admin/batches" icon="📂">Потоки обучения</NavLink>
+              <NavLink to="/admin/users" icon="👥">Сотрудники</NavLink>
+              <NavLink to="/admin/progress" icon="📈">Прогресс</NavLink>
+              <div class="border-t border-white/10 my-2"/>
+              <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
+              <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+            </template>
+            <template v-else-if="!isCommission">
               <NavLink to="/admin/dashboard" icon="📊">Дашборд</NavLink>
               <NavLink to="/admin/batches" icon="📂">Потоки обучения</NavLink>
               <NavLink to="/admin/users" icon="👥">Пользователи</NavLink>
@@ -60,13 +83,16 @@
               <NavLink to="/admin/med-exams" icon="🏥">Медосмотры</NavLink>
               <div class="border-t border-white/10 my-2"/>
             </template>
-            <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
-            <NavLink to="/admin/commission" icon="👨‍⚖️">Комиссия</NavLink>
-            <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+            <template v-if="!isOrgViewer">
+              <NavLink to="/admin/protocols" icon="📋">Протоколы</NavLink>
+              <NavLink to="/admin/commission" icon="👨‍⚖️">Комиссия</NavLink>
+              <NavLink to="/admin/certificates" icon="🏅">Удостоверения</NavLink>
+            </template>
           </nav>
           <div class="p-4 border-t border-white/10">
             <div class="text-sm text-gray-300">{{ fullName }}</div>
             <div v-if="isCommission" class="text-xs text-blue-300 mt-0.5">Член комиссии</div>
+            <div v-if="isOrgViewer" class="text-xs text-blue-300 mt-0.5">Просмотр по организации</div>
             <button @click="handleLogout" class="text-xs text-red-300 hover:text-red-100 mt-1">Выйти</button>
           </div>
         </aside>
@@ -98,6 +124,7 @@ const route = useRoute()
 const sidebarOpen = ref(false)
 const fullName = localStorage.getItem('full_name') || ''
 const isCommission = localStorage.getItem('is_commission') === '1'
+const isOrgViewer = localStorage.getItem('is_org_viewer') === '1'
 
 function handleLogout() {
   localStorage.clear()

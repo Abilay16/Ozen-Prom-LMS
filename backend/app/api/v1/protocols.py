@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
+from app.api.deps import CurrentAdmin, CurrentSuperAdmin, org_scope_id, DB
 from app.models.user import User, AdminUser
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.protocol import (
@@ -241,6 +241,15 @@ async def list_protocols(
         q = q.where(Protocol.batch_id == batch_id)
     if status:
         q = q.where(Protocol.status == status)
+    # An org viewer only sees protocols for their own organization — a
+    # protocol's org can come from its own organization_id or, when that's
+    # unset, from its batch's organization_id.
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.outerjoin(TrainingBatch, Protocol.batch_id == TrainingBatch.id).where(
+            (Protocol.organization_id == org_id)
+            | ((Protocol.organization_id.is_(None)) & (TrainingBatch.organization_id == org_id))
+        )
     q = q.offset(skip).limit(limit)
     result = await db.execute(q)
     protocols = result.scalars().all()
@@ -354,7 +363,13 @@ async def create_protocol(data: ProtocolCreate, db: DB, admin: CurrentSuperAdmin
 
 @router.get("/{protocol_id}")
 async def get_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin):
-    return await _get_protocol_or_404(protocol_id, db)
+    protocol = await _get_protocol_or_404(protocol_id, db)
+    org_id = org_scope_id(admin)
+    if org_id:
+        effective_org = protocol.organization_id or (protocol.batch.organization_id if protocol.batch else None)
+        if effective_org != org_id:
+            raise NotFoundError("Протокол не найден")
+    return protocol
 
 
 @router.patch("/{protocol_id}")

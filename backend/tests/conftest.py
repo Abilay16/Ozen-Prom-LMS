@@ -161,13 +161,16 @@ def make_fresh_cms_b64(cn: str, payload: bytes = b"PROTOCOL TEST PAYLOAD") -> st
 # ── Reusable data-setup helpers ───────────────────────────────────────────────
 
 async def make_admin(db, full_name="Test Admin", is_superadmin=False,
-                     is_commission_eligible=False):
+                     is_commission_eligible=False, organization_id=None,
+                     is_org_viewer=False):
     """Insert an AdminUser, return (admin, jwt_token)."""
     admin = AdminUser(
         id=uuid4(), login=f"admin_{uuid4().hex[:6]}",
         password_hash=hash_password("x"), full_name=full_name, is_active=True,
         is_superadmin=is_superadmin,
         is_commission_eligible=is_commission_eligible,
+        organization_id=organization_id,
+        is_org_viewer=is_org_viewer,
     )
     db.add(admin)
     await db.flush()

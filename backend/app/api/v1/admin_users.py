@@ -28,6 +28,8 @@ class AdminUserOut(BaseModel):
     is_commission_eligible: bool
     is_default_chair: bool
     position_title: Optional[str]
+    organization_id: Optional[uuid.UUID] = None
+    is_org_viewer: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +39,8 @@ class AdminUserPatch(BaseModel):
     position_title: Optional[str] = None
     is_commission_eligible: Optional[bool] = None
     is_default_chair: Optional[bool] = None
+    organization_id: Optional[uuid.UUID] = None
+    is_org_viewer: Optional[bool] = None
 
 
 class AdminUserCreate(BaseModel):
@@ -46,6 +50,8 @@ class AdminUserCreate(BaseModel):
     email: Optional[str] = None
     position_title: Optional[str] = None
     is_commission_eligible: bool = False
+    organization_id: Optional[uuid.UUID] = None
+    is_org_viewer: bool = False
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -104,6 +110,8 @@ async def create_admin_user(
         email=data.email,
         position_title=data.position_title,
         is_commission_eligible=data.is_commission_eligible,
+        organization_id=data.organization_id,
+        is_org_viewer=data.is_org_viewer,
         is_superadmin=False,
         is_active=True,
     )
@@ -130,6 +138,10 @@ async def patch_admin_user(
         au.position_title = data.position_title
     if data.is_commission_eligible is not None:
         au.is_commission_eligible = data.is_commission_eligible
+    if data.organization_id is not None:
+        au.organization_id = data.organization_id
+    if data.is_org_viewer is not None:
+        au.is_org_viewer = data.is_org_viewer
     if data.is_default_chair is not None:
         if data.is_default_chair:
             # Only one default chair at a time — unset it on everyone else.

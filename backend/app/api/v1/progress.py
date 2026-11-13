@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, CurrentViewerAdmin, org_scope_id, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.attempt import TestAttempt, AttemptStatus
 from app.models.user import User
@@ -36,25 +36,30 @@ async def allow_retake(assignment_id: UUID, db: DB, admin: CurrentAdmin):
 
 
 @router.get("/stats")
-async def get_stats(db: DB, admin: CurrentAdmin):
+async def get_stats(db: DB, admin: CurrentViewerAdmin):
     from app.models.batch import TrainingBatch
-    users_count = (await db.execute(select(func.count()).select_from(User))).scalar()
-    batches_count = (await db.execute(select(func.count()).select_from(TrainingBatch))).scalar()
+    org_id = org_scope_id(admin)
+
+    users_q = select(func.count()).select_from(User)
+    batches_q = select(func.count()).select_from(TrainingBatch)
+    assign_q = select(func.count()).select_from(UserCourseAssignment)
+    if org_id:
+        users_q = users_q.where(User.organization_id == org_id)
+        batches_q = batches_q.where(TrainingBatch.organization_id == org_id)
+        assign_q = assign_q.join(User, UserCourseAssignment.user_id == User.id).where(User.organization_id == org_id)
+
+    users_count = (await db.execute(users_q)).scalar()
+    batches_count = (await db.execute(batches_q)).scalar()
     passed = (await db.execute(
-        select(func.count()).select_from(UserCourseAssignment)
-        .where(UserCourseAssignment.status == AssignmentStatus.passed)
+        assign_q.where(UserCourseAssignment.status == AssignmentStatus.passed)
     )).scalar()
     in_progress = (await db.execute(
-        select(func.count()).select_from(UserCourseAssignment)
-        .where(UserCourseAssignment.status == AssignmentStatus.in_progress)
+        assign_q.where(UserCourseAssignment.status == AssignmentStatus.in_progress)
     )).scalar()
     failed = (await db.execute(
-        select(func.count()).select_from(UserCourseAssignment)
-        .where(UserCourseAssignment.status == AssignmentStatus.failed)
+        assign_q.where(UserCourseAssignment.status == AssignmentStatus.failed)
     )).scalar()
-    total_assignments = (await db.execute(
-        select(func.count()).select_from(UserCourseAssignment)
-    )).scalar()
+    total_assignments = (await db.execute(assign_q)).scalar()
     return {
         "users": users_count,
         "batches": batches_count,
@@ -68,7 +73,7 @@ async def get_stats(db: DB, admin: CurrentAdmin):
 @router.get("")
 async def get_progress(
     db: DB,
-    admin: CurrentAdmin,
+    admin: CurrentViewerAdmin,
     organization_id: Optional[UUID] = Query(None),
     batch_id: Optional[UUID] = Query(None),
     status: Optional[AssignmentStatus] = Query(None),
@@ -92,7 +97,10 @@ async def get_progress(
         q = q.where(UserCourseAssignment.batch_id == batch_id)
     if status:
         q = q.where(UserCourseAssignment.status == status)
-    if organization_id:
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.where(User.organization_id == org_id)
+    elif organization_id:
         q = q.where(User.organization_id == organization_id)
     if search:
         q = q.where(User.normalized_full_name.ilike(f"%{search.lower()}%"))

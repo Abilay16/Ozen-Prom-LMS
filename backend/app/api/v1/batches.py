@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File
 from sqlalchemy import select
 
-from app.api.deps import CurrentAdmin, CurrentSuperAdmin, DB
+from app.api.deps import CurrentAdmin, CurrentSuperAdmin, org_scope_id, DB
 from app.models.batch import TrainingBatch, BatchStatus
 from app.models.discipline import Discipline
 from app.core.exceptions import NotFoundError
@@ -20,9 +20,11 @@ class BatchCreate(BaseModel):
 
 @router.get("")
 async def list_batches(db: DB, admin: CurrentAdmin):  # all admins can read
-    result = await db.execute(
-        select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
-    )
+    q = select(TrainingBatch).order_by(TrainingBatch.created_at.desc())
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.where(TrainingBatch.organization_id == org_id)
+    result = await db.execute(q)
     batches = result.scalars().all()
 
     # Collect all discipline IDs in one query
@@ -79,6 +81,9 @@ async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):  # all admins 
     )
     batch = result.scalar_one_or_none()
     if not batch:
+        raise NotFoundError("Batch not found")
+    org_id = org_scope_id(admin)
+    if org_id and batch.organization_id != org_id:
         raise NotFoundError("Batch not found")
     # Count import rows
     rows_result = await db.execute(

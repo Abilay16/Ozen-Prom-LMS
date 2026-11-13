@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentSuperAdmin as CurrentAdmin, DB
+from app.api.deps import CurrentSuperAdmin as CurrentAdmin, CurrentViewerAdmin, org_scope_id, DB
 from app.models.user import User
 from app.core.security import hash_password
 from app.core.exceptions import NotFoundError, ConflictError
@@ -122,16 +122,20 @@ async def create_user(data: CreateUserRequest, db: DB, admin: CurrentAdmin):
 
 
 @router.get("/count")
-async def count_users(db: DB, admin: CurrentAdmin):
+async def count_users(db: DB, admin: CurrentViewerAdmin):
     from sqlalchemy import func
-    result = await db.execute(select(func.count()).select_from(User))
+    q = select(func.count()).select_from(User)
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.where(User.organization_id == org_id)
+    result = await db.execute(q)
     return {"count": result.scalar()}
 
 
 @router.get("")
 async def list_users(
     db: DB,
-    admin: CurrentAdmin,
+    admin: CurrentViewerAdmin,
     search: Optional[str] = Query(None),
     organization_id: Optional[UUID] = Query(None),
     is_active: Optional[bool] = Query(None),
@@ -141,7 +145,13 @@ async def list_users(
     q = select(User)
     if search:
         q = q.where(User.normalized_full_name.ilike(f"%{search.lower()}%"))
-    if organization_id:
+    # An org viewer is always scoped to their own organization — ignore
+    # whatever the client asked for, never trust a client-supplied org filter
+    # for access control.
+    org_id = org_scope_id(admin)
+    if org_id:
+        q = q.where(User.organization_id == org_id)
+    elif organization_id:
         q = q.where(User.organization_id == organization_id)
     if is_active is not None:
         q = q.where(User.is_active == is_active)

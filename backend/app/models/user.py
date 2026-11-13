@@ -73,6 +73,13 @@ class AdminUser(Base):
     is_commission_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default_chair: Mapped[bool] = mapped_column(Boolean, default=False)  # auto-picked as chair on new protocols
     position_title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # Read-only "org viewer" account: sees only the data (employees, streams,
+    # protocols, certificates, progress) belonging to this organization.
+    # NULL organization_id for a non-viewer admin means no scoping applies.
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
+    )
+    is_org_viewer: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
