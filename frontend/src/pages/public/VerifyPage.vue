@@ -11,7 +11,7 @@
 
     <div v-else-if="error" class="max-w-sm mx-auto px-4 py-6">
       <div class="bg-white rounded-2xl shadow p-8 text-center">
-        <div class="text-5xl mb-4">❌</div>
+        <CircleX :size="52" :stroke-width="1.6" class="mx-auto mb-4 text-red-500" />
         <h2 class="text-xl font-bold text-red-600 mb-2">Недействительно</h2>
         <p class="text-gray-500 text-sm">Удостоверение не найдено или отозвано.</p>
       </div>
@@ -28,9 +28,12 @@
             'bg-red-600 text-white': cert.status === 'expired',
           }"
         >
-          <span v-if="cert.status === 'active'">✅ Удостоверение действительно</span>
-          <span v-else-if="cert.status === 'expiring_soon'">⚠️ Удостоверение скоро истекает</span>
-          <span v-else>❌ Срок действия удостоверения истёк</span>
+          <span class="inline-flex items-center gap-2">
+            <component :is="cert.status === 'active' ? CircleCheck : cert.status === 'expiring_soon' ? TriangleAlert : CircleX" :size="19" :stroke-width="2.3" />
+            <template v-if="cert.status === 'active'">{{ docWord.ok }}</template>
+            <template v-else-if="cert.status === 'expiring_soon'">{{ docWord.soon }}</template>
+            <template v-else>{{ docWord.expired }}</template>
+          </span>
         </div>
       </div>
 
@@ -57,12 +60,18 @@ import { useRoute } from 'vue-router'
 import QRCode from 'qrcode'
 import api from '@/services/api'
 import CertificateDocument from '@/components/CertificateDocument.vue'
+import { CircleCheck, CircleX, TriangleAlert } from 'lucide-vue-next'
+import { isBiotItrCertificate } from '@/utils/certKind'
 
 const route = useRoute()
 const cert = ref(null)
 const loading = ref(true)
 const error = ref(false)
 const qrDataUrl = ref('')
+
+const docWord = computed(() => isBiotItrCertificate(cert.value)
+  ? { ok: 'Сертификат действителен', soon: 'Сертификат скоро истекает', expired: 'Срок действия сертификата истёк' }
+  : { ok: 'Удостоверение действительно', soon: 'Удостоверение скоро истекает', expired: 'Срок действия удостоверения истёк' })
 
 const verifyUrl = computed(() =>
   `ozenlms.kz/verify/${cert.value?.id ?? ''}`

@@ -1,93 +1,122 @@
 <template>
-  <div v-if="loading" class="text-gray-500">Загрузка...</div>
-  <div v-else-if="assignment">
-    <!-- Back -->
-    <RouterLink to="/my/courses" class="text-sm text-brand-mid hover:underline mb-4 inline-block">← Мои курсы</RouterLink>
+  <div v-if="loading" class="space-y-3">
+    <span class="skel" style="width: 6rem; height: 0.9rem;" />
+    <div class="panel"><span class="skel" style="width: 60%; height: 1.4rem;" /><span class="skel mt-3" style="width: 85%; height: 0.9rem;" /></div>
+    <div class="panel"><span class="skel" style="width: 100%; height: 3rem;" /></div>
+  </div>
 
-    <div class="card mb-6">
-      <div class="flex items-center justify-between mb-4">
-        <span :class="statusBadge(assignment.status)">{{ statusLabel(assignment.status) }}</span>
-        <span class="text-sm text-gray-400">{{ assignment.discipline?.name }}</span>
+  <div v-else-if="!assignment" class="panel text-center text-gray-500">
+    Курс не найден.
+    <RouterLink to="/my/courses" class="block mt-2 text-sm font-medium text-blue-700">Вернуться к моим курсам</RouterLink>
+  </div>
+
+  <div v-else>
+    <RouterLink to="/my/courses" class="back-link">
+      <ChevronLeft :size="16" :stroke-width="2.4" /> Мои курсы
+    </RouterLink>
+
+    <!-- Курс -->
+    <section class="panel hero">
+      <div class="flex items-center justify-between gap-3">
+        <span class="status" :class="`status--${assignment.status}`">
+          <component :is="STATUS[assignment.status]?.icon || Circle" :size="14" :stroke-width="2.4" />
+          {{ STATUS[assignment.status]?.label || assignment.status }}
+        </span>
+        <span class="discipline">{{ assignment.discipline?.name }}</span>
       </div>
-      <h1 class="text-2xl font-bold mb-2">{{ assignment.course?.name }}</h1>
-      <p class="text-gray-600">{{ assignment.course?.description }}</p>
-    </div>
+      <h1 class="hero__title">{{ assignment.course?.name }}</h1>
+      <p v-if="assignment.course?.description" class="hero__desc">{{ assignment.course.description }}</p>
+    </section>
 
-    <!-- Materials -->
-    <div class="card mb-6">
-      <h2 class="font-semibold text-lg mb-4">Материалы курса</h2>
-      <div v-if="!assignment.course?.materials?.length" class="text-gray-400 text-sm">Материалы не добавлены</div>
-      <div class="space-y-2">
-        <div
-          v-for="(mat, idx) in assignment.course?.materials"
-          :key="mat.id"
-          class="flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          <span class="text-2xl flex-shrink-0">{{ materialIcon(mat.material_type) }}</span>
-          <div class="flex-1 min-w-0">
-            <div class="font-medium text-sm truncate">{{ mat.title }}</div>
-            <div class="text-xs text-gray-400">{{ matTypeLabel(mat.material_type) }}</div>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <!-- External link -->
-            <a
-              v-if="mat.material_type === 'external_link' && mat.url"
-              :href="mat.url"
-              target="_blank"
-              class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium"
-            >Открыть ↗</a>
-            <!-- Viewable or downloadable file -->
-            <template v-else>
-              <button
-                @click="openViewer(idx)"
-                class="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg font-medium"
-              >👁 Открыть</button>
-              <button
-                v-if="mat.file_path"
-                @click="downloadMaterial(mat)"
-                class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 hover:underline"
-              >↓ Скачать</button>
-            </template>
+    <!-- Шаг 1: материалы -->
+    <section class="panel">
+      <h2 class="step-title"><span class="step-num">1</span> Изучите материалы</h2>
+      <p v-if="!allMaterials.length" class="muted">Материалы к курсу не добавлены — можно сразу переходить к тесту.</p>
+      <ul v-else class="materials">
+        <li v-for="(mat, idx) in allMaterials" :key="mat.id" class="material">
+          <a
+            v-if="mat.material_type === 'external_link' && mat.url"
+            :href="mat.url" target="_blank" rel="noopener" class="material__main"
+          >
+            <span class="material__icon"><component :is="materialIcon(mat.material_type)" :size="20" :stroke-width="1.9" /></span>
+            <span class="material__text">
+              <span class="material__title">{{ mat.title }}</span>
+              <span class="material__type">{{ matTypeLabel(mat.material_type) }} · откроется в новой вкладке</span>
+            </span>
+            <ExternalLink :size="18" class="material__chev" />
+          </a>
+          <button v-else type="button" class="material__main" @click="openViewer(idx)">
+            <span class="material__icon"><component :is="materialIcon(mat.material_type)" :size="20" :stroke-width="1.9" /></span>
+            <span class="material__text">
+              <span class="material__title">{{ mat.title }}</span>
+              <span class="material__type">{{ matTypeLabel(mat.material_type) }}</span>
+            </span>
+            <ChevronRight :size="18" class="material__chev" />
+          </button>
+          <button
+            v-if="mat.file_path"
+            type="button" class="material__dl" :title="`Скачать «${mat.title}»`" :aria-label="`Скачать «${mat.title}»`"
+            @click="downloadMaterial(mat)"
+          >
+            <Download :size="18" :stroke-width="2" />
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Шаг 2: тест -->
+    <section class="panel">
+      <h2 class="step-title"><span class="step-num">2</span> Пройдите тест</h2>
+
+      <div v-if="!assignment.course?.test" class="muted">Тест к этому курсу ещё не добавлен. Обратитесь к администратору.</div>
+
+      <div v-else-if="assignment.status === 'passed'" class="outcome outcome--ok">
+        <CircleCheck :size="22" :stroke-width="2.2" />
+        <div>
+          <div class="outcome__title">Тест сдан<template v-if="bestScore !== null"> — {{ bestScore }}%</template></div>
+          <div class="outcome__text">Удостоверение появится в разделе «Удостоверения» после подписания протокола комиссией.</div>
+        </div>
+      </div>
+
+      <div v-else-if="assignment.status === 'failed'" class="outcome outcome--bad">
+        <CircleX :size="22" :stroke-width="2.2" />
+        <div>
+          <div class="outcome__title">Попытки исчерпаны</div>
+          <div class="outcome__text">
+            Использовано {{ completedAttempts }} из {{ test.max_attempts || '∞' }}<template v-if="bestScore !== null">, лучший результат {{ bestScore }}%</template>.
+            Чтобы получить ещё попытку, обратитесь к администратору учебного центра.
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Test section -->
-    <div class="card">
-      <h2 class="font-semibold text-lg mb-2">Тест</h2>
-      <div v-if="assignment.status === 'passed'" class="text-green-600 font-medium mb-4">
-        ✓ Тест пройден
-        <span v-if="assignment.course?.test?.pass_score" class="text-sm text-gray-400 ml-2">(проходной балл: {{ assignment.course.test.pass_score }}%)</span>
-      </div>
-      <div v-else-if="assignment.status === 'failed'" class="text-red-500 font-medium mb-4">
-        Попытки исчерпаны ({{ completedAttempts }} из {{ assignment.course.test?.max_attempts || '∞' }})
-      </div>
-      <div v-else>
-        <p class="text-sm text-gray-600 mb-3">После изучения материалов пройдите тест для завершения курса.</p>
-        <div v-if="assignment.course?.test" class="text-sm text-gray-500 mb-4 flex gap-4">
-          <span>Попытка <strong>{{ completedAttempts + 1 }}</strong> из <strong>{{ assignment.course.test.max_attempts > 0 ? assignment.course.test.max_attempts : '∞' }}</strong></span>
-          <span>Проходной балл: <strong>{{ assignment.course.test.pass_score }}%</strong></span>
-          <span v-if="assignment.course.test.time_limit_minutes > 0">Время: <strong>{{ assignment.course.test.time_limit_minutes }} мин</strong></span>
-        </div>
-        <button @click="startTest" :disabled="starting" class="btn-primary">
-          {{ starting ? 'Запуск...' : 'Начать тест' }}
+      <template v-else>
+        <dl class="facts">
+          <div><dt>Проходной балл</dt><dd>{{ test.pass_score }}%</dd></div>
+          <div><dt>Попытка</dt><dd>{{ completedAttempts + 1 }} из {{ test.max_attempts > 0 ? test.max_attempts : '∞' }}</dd></div>
+          <div v-if="test.time_limit_minutes > 0"><dt>Время</dt><dd>{{ test.time_limit_minutes }} мин</dd></div>
+        </dl>
+        <p v-if="test.time_limit_minutes > 0" class="muted mt-3">
+          Таймер запустится сразу после нажатия. Если время выйдет, тест сдастся автоматически с выбранными ответами.
+        </p>
+        <button type="button" class="start-btn" :disabled="starting" @click="startTest">
+          <Loader2 v-if="starting" :size="18" class="animate-spin" />
+          {{ starting ? 'Запускаем…' : (completedAttempts ? 'Пройти тест ещё раз' : 'Начать тест') }}
         </button>
-      </div>
-    </div>
+      </template>
+    </section>
 
     <!-- ========== FULLSCREEN MATERIAL VIEWER ========== -->
     <teleport to="body">
       <div v-if="viewerOpen" class="fixed inset-0 z-50 flex flex-col bg-black">
         <!-- Header -->
         <div class="flex items-center gap-3 px-4 py-3 bg-gray-900 text-white flex-shrink-0">
-          <span class="text-xl flex-shrink-0">{{ materialIcon(currentMat.material_type) }}</span>
+          <component :is="materialIcon(currentMat.material_type)" :size="20" class="flex-shrink-0 text-gray-300" />
           <div class="flex-1 min-w-0">
             <div class="font-medium text-sm truncate">{{ currentMat.title }}</div>
             <div class="text-xs text-gray-400">{{ matTypeLabel(currentMat.material_type) }}</div>
           </div>
           <span class="text-xs text-gray-400 flex-shrink-0">{{ viewerIndex + 1 }} / {{ allMaterials.length }}</span>
-          <button @click="closeViewer" class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white text-xl leading-none">×</button>
+          <button @click="closeViewer" class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/10" aria-label="Закрыть"><X :size="20" /></button>
         </div>
 
         <!-- Content area -->
@@ -134,7 +163,7 @@
 
           <!-- Other video URL -->
           <div v-else-if="currentMat.material_type === 'video_url' && currentMat.url" class="flex flex-col items-center justify-center h-full gap-4 text-white">
-            <span class="text-5xl">▶️</span>
+            <PlayCircle :size="48" :stroke-width="1.5" />
             <a :href="currentMat.url" target="_blank" class="text-blue-400 underline text-sm">Открыть видео в новой вкладке ↗</a>
           </div>
 
@@ -145,7 +174,7 @@
 
           <!-- Not previewable: ppt/pptx/docx — PDF sidecar not ready yet or unsupported -->
           <div v-else class="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-            <span class="text-6xl">{{ materialIcon(currentMat.material_type) }}</span>
+            <component :is="materialIcon(currentMat.material_type)" :size="48" :stroke-width="1.4" class="text-gray-400" />
             <p class="text-base font-semibold text-gray-700">{{ currentMat.title }}</p>
             <template v-if="isOfficefile(currentMat)">
               <p class="text-sm text-gray-500">
@@ -154,10 +183,10 @@
               <p class="text-xs text-gray-400">Попробуйте открыть через несколько секунд или скачайте файл.</p>
               <div class="flex gap-3 mt-2">
                 <button @click="retryLoad(currentMat)" class="px-5 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-600">
-                  ↺ Обновить
+                  Обновить
                 </button>
                 <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-                  ↓ Скачать
+                  Скачать
                 </button>
               </div>
             </template>
@@ -166,7 +195,7 @@
                 Формат <strong>{{ fileExtLabel(currentMat) }}</strong> не поддерживает просмотр в браузере.
               </p>
               <button v-if="currentMat.file_path" @click="downloadMaterial(currentMat)" class="mt-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-                ↓ Скачать и открыть
+                Скачать и открыть
               </button>
             </template>
           </div>
@@ -178,20 +207,20 @@
             @click="prevMaterial"
             :disabled="viewerIndex === 0"
             class="px-5 py-2 rounded-lg text-sm font-medium border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >← Назад</button>
+          >Назад</button>
 
           <button
             v-if="currentMat.file_path"
             @click="downloadMaterial(currentMat)"
             class="text-xs text-gray-400 hover:text-white transition-colors"
-          >↓ Скачать</button>
+          >Скачать</button>
           <span v-else></span>
 
           <button
             @click="nextMaterial"
             :disabled="viewerIndex === allMaterials.length - 1"
             class="px-5 py-2 rounded-lg text-sm font-medium border border-gray-600 text-white hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >Вперёд →</button>
+          >Вперёд</button>
         </div>
       </div>
     </teleport>
@@ -204,6 +233,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import api from '@/services/api'
 import PdfViewer from '@/components/PdfViewer.vue'
+import {
+  ChevronLeft, ChevronRight, Circle, CircleCheck, CircleX, Clock, Download, ExternalLink,
+  FileText, Image as ImageIcon, Link2, Loader2, Paperclip, PlayCircle, Video, X,
+} from 'lucide-vue-next'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 
 const toast = useToast()
@@ -262,11 +295,25 @@ function fileExtLabel(mat) {
 const completedAttempts = computed(() =>
   assignment.value?.attempts?.filter(a => a.status === 'completed').length ?? 0
 )
+const test = computed(() => assignment.value?.course?.test || {})
+const bestScore = computed(() => {
+  const scores = (assignment.value?.attempts || []).map(a => a.score_percent).filter(s => s !== null && s !== undefined)
+  return scores.length ? Math.max(...scores) : null
+})
+
+const STATUS = {
+  assigned: { label: 'Назначен', icon: Circle },
+  in_progress: { label: 'В процессе', icon: Clock },
+  passed: { label: 'Сдан', icon: CircleCheck },
+  failed: { label: 'Не сдан', icon: CircleX },
+}
 
 onMounted(async () => {
   try {
     const { data } = await api.get(`/learner/me/courses/${route.params.id}`)
     assignment.value = data
+  } catch (e) {
+    if (e.response?.status !== 404) toast.error(apiErrorMessage(e))
   } finally {
     loading.value = false
   }
@@ -387,8 +434,7 @@ async function startTest() {
 }
 
 function materialIcon(type) {
-  const icons = { video_file: '🎬', video_url: '▶️', pdf: '📄', docx: '📝', image: '🖼️', external_link: '🔗' }
-  return icons[type] || '📎'
+  return { video_file: Video, video_url: PlayCircle, pdf: FileText, docx: FileText, image: ImageIcon, external_link: Link2 }[type] || Paperclip
 }
 
 function matTypeLabel(type) {
@@ -407,18 +453,120 @@ async function downloadMaterial(mat) {
     const url = URL.createObjectURL(data)
     const a = document.createElement('a')
     a.href = url
-    a.download = mat.title || 'file'
+    // Название + расширение исходного файла: без расширения телефон не знает, чем открыть.
+    const ext = fileExt(mat)
+    const name = (mat.title || 'material').replace(/[\\/:*?"<>|]+/g, ' ').trim()
+    a.download = ext && !name.toLowerCase().endsWith('.' + ext) ? `${name}.${ext}` : name
+    document.body.appendChild(a)
     a.click()
-    URL.revokeObjectURL(url)
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch {
     toast.error('Не удалось скачать файл')
   }
 }
 
-function statusBadge(s) {
-  return { assigned: 'badge-assigned', in_progress: 'badge-progress', passed: 'badge-passed', failed: 'badge-failed' }[s] || 'badge-assigned'
-}
-function statusLabel(s) {
-  return { assigned: 'Назначен', in_progress: 'В процессе', passed: 'Сдан ✓', failed: 'Не сдан' }[s] || s
-}
 </script>
+
+<style scoped>
+.panel {
+  background: #fff;
+  border: 1px solid #e7e9ee;
+  border-radius: 0.9rem;
+  padding: 1.15rem;
+  margin-bottom: 0.85rem;
+}
+@media (min-width: 640px) { .panel { padding: 1.4rem 1.5rem; } }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1f4f96;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+
+.status {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.75rem; font-weight: 600;
+  padding: 0.2rem 0.55rem 0.2rem 0.45rem; border-radius: 999px;
+}
+.status--assigned { background: #eef3fb; color: #1f4f96; }
+.status--in_progress { background: #fff4e0; color: #9a5b00; }
+.status--passed { background: #e7f6ee; color: #11683f; }
+.status--failed { background: #fdecec; color: #a12a1f; }
+.discipline { font-size: 0.75rem; color: #8a93a3; text-align: right; }
+
+.hero__title {
+  margin-top: 0.8rem;
+  font-size: 1.4rem; font-weight: 700; line-height: 1.25; letter-spacing: -0.015em;
+  color: #101828; text-wrap: balance;
+}
+.hero__desc { margin-top: 0.4rem; color: #4b5565; font-size: 0.925rem; text-wrap: pretty; }
+
+.step-title {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 1.05rem; font-weight: 650; color: #101828; margin-bottom: 0.85rem;
+}
+.step-num {
+  width: 1.6rem; height: 1.6rem; border-radius: 999px;
+  display: grid; place-items: center;
+  background: #1f3a5c; color: #fff; font-size: 0.8rem; font-weight: 700;
+}
+.muted { font-size: 0.875rem; color: #6b7280; text-wrap: pretty; }
+
+.materials { display: flex; flex-direction: column; gap: 0.5rem; }
+.material {
+  display: flex; align-items: stretch;
+  border: 1px solid #e7e9ee; border-radius: 0.75rem; overflow: hidden;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.material:hover { border-color: #c9d3e3; }
+.material__main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.7rem 0.8rem; text-align: left; text-decoration: none; color: inherit;
+}
+.material__main:hover { background: #f8fafc; }
+.material__icon {
+  width: 2.4rem; height: 2.4rem; border-radius: 0.6rem; flex-shrink: 0;
+  display: grid; place-items: center; background: #eef3fb; color: #1f4f96;
+}
+.material__text { display: flex; flex-direction: column; min-width: 0; }
+.material__title { font-weight: 550; font-size: 0.9rem; color: #101828; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material__type { font-size: 0.75rem; color: #8a93a3; }
+.material__chev { margin-left: auto; color: #a3abb8; flex-shrink: 0; }
+.material__dl {
+  width: 3rem; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-left: 1px solid #eef0f4; color: #4b5565;
+}
+.material__dl:hover { background: #f1f3f6; color: #1f3a5c; }
+.material__main:focus-visible, .material__dl:focus-visible, .start-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 0.5rem; }
+.facts > div { background: #f6f7f9; border-radius: 0.65rem; padding: 0.6rem 0.75rem; }
+.facts dt { font-size: 0.72rem; color: #6b7280; }
+.facts dd { font-size: 1rem; font-weight: 650; color: #101828; font-variant-numeric: tabular-nums; }
+
+.start-btn {
+  margin-top: 1rem; width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0.85rem 1.25rem; border-radius: 0.75rem;
+  background: #2563eb; color: #fff; font-weight: 650; font-size: 1rem;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.start-btn:hover:not(:disabled) { background: #1d4ed8; box-shadow: 0 6px 16px -8px rgba(37, 99, 235, 0.7); }
+.start-btn:disabled { opacity: 0.6; }
+@media (min-width: 640px) { .start-btn { width: auto; min-width: 14rem; } }
+
+.outcome { display: flex; gap: 0.75rem; align-items: flex-start; border-radius: 0.75rem; padding: 0.85rem 1rem; }
+.outcome--ok { background: #e7f6ee; color: #11683f; }
+.outcome--bad { background: #fdecec; color: #a12a1f; }
+.outcome__title { font-weight: 650; }
+.outcome__text { margin-top: 0.15rem; font-size: 0.85rem; color: #374151; text-wrap: pretty; }
+</style>

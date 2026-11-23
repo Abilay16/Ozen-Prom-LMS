@@ -3,16 +3,17 @@
        :class="{ 'bg-white py-0 px-0': isPrintMode }">
     <!-- Toolbar (hidden on print and in standalone print mode) -->
     <div v-if="!isPrintMode" class="max-w-2xl mx-auto mb-4 flex gap-3 print:hidden">
-      <button @click="$router.back()" class="text-sm text-gray-500 hover:text-gray-700">← Назад</button>
+      <button @click="$router.back()" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"><ChevronLeft :size="16" /> Назад</button>
       <button @click="printCert()" class="ml-auto bg-brand-dark text-white text-sm px-4 py-2 rounded-lg hover:bg-opacity-90">
-        🖨 Распечатать / Скачать PDF
+        <Printer :size="16" class="inline -mt-0.5 mr-1" /> Распечатать / Скачать PDF
       </button>
     </div>
 
     <!-- Standalone print mode toolbar -->
     <div v-if="isPrintMode" class="no-print flex gap-3 p-4 bg-gray-100 border-b mb-4">
-      <button @click="router.back()" class="text-sm text-gray-600 hover:text-gray-800">← Назад</button>
-      <button @click="window.print()" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700">🖨 Печать</button>
+      <button @click="router.back()" class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"><ChevronLeft :size="16" /> Назад</button>
+      <!-- window в шаблоне Vue недоступен — раньше эта кнопка не работала -->
+      <button @click="printNow" class="inline-flex items-center gap-1.5 text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700"><Printer :size="16" /> Печать</button>
       <button @click="doSavePdf()" class="text-sm bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700">⬇ Скачать PDF</button>
     </div>
 
@@ -37,6 +38,8 @@ import QRCode from 'qrcode'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import CertificateDocument from '@/components/CertificateDocument.vue'
+import { ChevronLeft, Printer } from 'lucide-vue-next'
+import { isBiotItrCertificate } from '@/utils/certKind'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,9 +98,15 @@ function printCert() {
   router.push(`/print/certificate/${route.params.id}`)
 }
 
+function printNow() {
+  window.print()
+}
+
 function doSavePdf() {
   const prev = document.title
-  document.title = `Удостоверение_${cert.value?.certificate_number || route.params.id}`
+  // Имя PDF по умолчанию — по номеру документа
+  const word = isBiotItrCertificate(cert.value) ? 'Сертификат' : 'Удостоверение'
+  document.title = `${word}_${cert.value?.certificate_number || route.params.id}`
   window.print()
   document.title = prev
 }

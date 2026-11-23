@@ -14,7 +14,7 @@
 
     <!-- Error -->
     <div v-else-if="error" class="max-w-sm mx-auto mt-10 px-4 text-center">
-      <div class="text-6xl mb-4">❌</div>
+      <CircleX :size="56" :stroke-width="1.6" class="mx-auto mb-4 text-red-500" />
       <h2 class="text-xl font-bold text-red-600 mb-2">Карточка не найдена</h2>
       <p class="text-gray-500 text-sm">Данный QR-код недействителен или устарел.</p>
     </div>
@@ -26,7 +26,7 @@
       <div class="bg-white rounded-2xl shadow-sm p-5 text-center">
         <div class="w-20 h-20 rounded-full overflow-hidden mx-auto mb-3 bg-blue-100 flex items-center justify-center">
           <img v-if="worker.photo_url" :src="worker.photo_url" class="w-full h-full object-cover" alt="Фото" />
-          <span v-else class="text-3xl">👷</span>
+          <UserRound v-else :size="34" :stroke-width="1.6" class="text-gray-400" />
         </div>
         <h1 class="text-lg font-bold text-gray-900 leading-snug">{{ worker.full_name }}</h1>
         <div v-if="worker.position" class="text-sm text-gray-600 mt-1">{{ worker.position }}</div>
@@ -132,7 +132,9 @@
             target="_blank"
             class="flex items-center bg-white rounded-2xl p-4 shadow-sm border-l-4 border-blue-300 active:bg-gray-50 transition-colors"
           >
-            <div class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-blue-50 mr-3">📎</div>
+            <div class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-blue-50 mr-3">
+              <Paperclip :size="18" class="text-blue-700" />
+            </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium text-gray-800 truncate">{{ d.title }}</div>
               <div class="text-xs text-gray-400 mt-0.5 truncate">{{ d.original_filename }} &middot; {{ formatDate(d.uploaded_at) }}</div>
@@ -154,6 +156,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/services/api'
+import { CircleX, Paperclip, UserRound } from 'lucide-vue-next'
 
 const route = useRoute()
 const worker = ref(null)

@@ -400,7 +400,7 @@
         :to="`/verify/${cert.id}/protocol`"
         style="display:inline-block; font-size:13px; color:#1a3a5c; border:1px solid #1a3a5c; border-radius:6px; padding:8px 16px; text-decoration:none;"
       >
-        📄 Посмотреть протокол
+        Посмотреть протокол
       </router-link>
     </div>
 
@@ -411,6 +411,7 @@
 import { computed } from 'vue'
 import SignatureStamp from '@/components/SignatureStamp.vue'
 import BiotItrCertificate from '@/components/BiotItrCertificate.vue'
+import { isBiotItrCertificate } from '@/utils/certKind'
 
 const props = defineProps({
   cert: { type: Object, required: true },
@@ -419,16 +420,7 @@ const props = defineProps({
   verifyUrl: { type: String, default: '' },
 })
 
-// БиОТ для ИТР выдаётся на 3 года (рабочим — на 1 год), поэтому определяем
-// его по сроку действия: от 30 месяцев и больше — это ИТР.
-const isBiotItr = computed(() => {
-  const c = props.cert
-  if (c?.training_type?.code !== 'biot' || !c.issued_date || !c.valid_until) return false
-  const from = new Date(c.issued_date + 'T00:00:00')
-  const to = new Date(c.valid_until + 'T00:00:00')
-  const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
-  return months >= 30
-})
+const isBiotItr = computed(() => isBiotItrCertificate(props.cert))
 
 const isPromBez = computed(() => props.cert?.training_type?.code === 'prombez')
 const isPtm = computed(() => props.cert?.training_type?.code === 'ptm')

@@ -181,6 +181,7 @@ async def submit_test(attempt_id: UUID, body: SubmitAnswers, db: DB, learner: Cu
 async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
     result = await db.execute(
         select(TestAttempt)
+        .options(selectinload(TestAttempt.test))
         .where(TestAttempt.id == attempt_id, TestAttempt.user_id == learner.id)
     )
     attempt = result.scalar_one_or_none()
@@ -192,6 +193,8 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
         "max_score": attempt.max_score,
         "score_percent": attempt.score_percent,
         "passed": attempt.passed,
+        "pass_score": attempt.test.pass_score if attempt.test else None,
+        "assignment_id": str(attempt.assignment_id) if attempt.assignment_id else None,
         "finished_at": attempt.finished_at,
     }
 

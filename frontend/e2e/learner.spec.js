@@ -6,8 +6,7 @@ test('обучающийся проходит тест и получает «Т�
   await login(page, 'learner')
   await expect(page).toHaveURL(/\/my\/courses/)
 
-  const card = page.locator('.card', { hasText: 'E2E курс' })
-  await card.getByText('Перейти к курсу').click()
+  await page.getByRole('link', { name: /E2E курс/ }).click()
   await expect(page).toHaveURL(/\/my\/courses\/.+/)
 
   await page.getByRole('button', { name: 'Начать тест' }).click()
@@ -16,6 +15,12 @@ test('обучающийся проходит тест и получает «Т�
   const correct = page.getByText('Верно', { exact: true })
   await expect(correct).toHaveCount(3)
   await correct.nth(0).click()
+
+  // Сдача с пропущенными вопросами — сначала предупреждение, можно вернуться.
+  await page.getByRole('button', { name: 'Завершить тест' }).click()
+  await expect(page.getByText(/Нет ответа на вопросы № 2, 3/)).toBeVisible()
+  await page.getByRole('button', { name: 'Вернуться к вопросам' }).click()
+
   await correct.nth(1).click()
 
   // Перезагрузка посреди теста не стирает выбранные ответы.

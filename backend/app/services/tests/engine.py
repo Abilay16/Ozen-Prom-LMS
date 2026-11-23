@@ -120,5 +120,6 @@ class TestEngineService:
             "score_percent": score_percent,
             "passed": passed,
             "pass_score": test.pass_score,
+            "assignment_id": str(attempt.assignment_id),
             "finished_at": attempt.finished_at.isoformat(),
         }
