@@ -298,9 +298,9 @@
                     Ожидаем подписи {{ unsignedMembersCount }} чл. комиссии...
                   </p>
                   <button @click="signProtocol"
-                          :disabled="myCommissionSlot.role === 'chair' && unsignedMembersCount > 0"
+                          :disabled="signing || (myCommissionSlot.role === 'chair' && unsignedMembersCount > 0)"
                           class="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40">
-                    {{ myCommissionSlot.role === 'chair' ? '✓ Подписать (председатель)' : '✓ Подписать' }}
+                    {{ signing ? 'Подписание…' : (myCommissionSlot.role === 'chair' ? '✓ Подписать (председатель)' : '✓ Подписать') }}
                   </button>
                 </div>
               </template>
@@ -635,7 +635,10 @@ async function requestSignatures() {
   }
 }
 
+const signing = ref(false)
+
 async function signProtocol() {
+  if (signing.value) return
   const isChair = myCommissionSlot.value?.role === 'chair'
   const msg = isChair
     ? 'Подписать протокол (председатель)? Это завершит процесс подписания.'
@@ -643,6 +646,15 @@ async function signProtocol() {
   const ok = await confirm({ message: msg, confirmText: 'Подписать' })
   if (!ok) return
 
+  signing.value = true
+  try {
+    await doSign(isChair)
+  } finally {
+    signing.value = false
+  }
+}
+
+async function doSign(isChair) {
   let cms = null
   try {
     // 1. Get the deterministic payload string from the backend

@@ -1,6 +1,6 @@
 """Admin-users management: commission eligibility + position title."""
 import uuid
-import random
+import secrets
 import string
 from typing import Optional
 
@@ -91,16 +91,16 @@ async def create_admin_user(
                 login = candidate
                 break
         else:
-            login = base + ''.join(random.choices(string.digits, k=4))
+            login = base + ''.join([secrets.choice(string.digits) for _ in range(4)])
 
     # Determine password
     if data.password:
         plain = data.password
     else:
-        letters = random.choices(string.ascii_lowercase, k=3)
-        digits = random.choices(string.digits, k=3)
+        letters = [secrets.choice(string.ascii_lowercase) for _ in range(3)]
+        digits = [secrets.choice(string.digits) for _ in range(3)]
         combo = letters + digits
-        random.shuffle(combo)
+        secrets.SystemRandom().shuffle(combo)
         plain = ''.join(combo)
 
     new_admin = AdminUser(

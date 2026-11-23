@@ -76,7 +76,8 @@ async def upload_document(
         raise HTTPException(413, "Файл слишком большой (макс. 20 МБ)")
 
     mime = file.content_type or ""
-    if not any(mime.startswith(p) for p in _ALLOWED_MIME_PREFIXES):
+    # SVG/HTML могут содержать скрипт — под видом «изображения» не принимаем.
+    if not any(mime.startswith(p) for p in _ALLOWED_MIME_PREFIXES) or "svg" in mime or "html" in mime:
         raise HTTPException(415, "Недопустимый тип файла. Разрешены: PDF, изображения, Word, Excel")
 
     # Sanitize title
@@ -85,7 +86,9 @@ async def upload_document(
     # Save file
     doc_dir = os.path.join(settings.STORAGE_LOCAL_PATH, "user_docs", str(learner.id))
     os.makedirs(doc_dir, exist_ok=True)
-    stored_name = f"{uuid.uuid4()}_{file.filename}"
+    # Только базовое имя без каталогов: «a/../b» в имени файла раньше давало 500.
+    safe_name = os.path.basename((file.filename or "").replace("\\", "/")).strip() or "file"
+    stored_name = f"{uuid.uuid4()}_{safe_name[:150]}"
     file_path = os.path.join(doc_dir, stored_name)
 
     import aiofiles
@@ -95,7 +98,7 @@ async def upload_document(
     doc = UserDocument(
         user_id=learner.id,
         title=title,
-        original_filename=file.filename or stored_name,
+        original_filename=safe_name,
         file_path=file_path,
         mime_type=mime or None,
         file_size=len(content),

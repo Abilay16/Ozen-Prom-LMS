@@ -2,7 +2,7 @@
 Test engine service.
 Calculates test result from submitted answers.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +10,16 @@ from sqlalchemy.orm import selectinload
 
 from app.models.attempt import TestAttempt, TestAttemptAnswer, AttemptStatus
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
+
+
+LATE_SUBMIT_GRACE = timedelta(minutes=2)
+
+
+def _as_uuid(raw) -> UUID | None:
+    try:
+        return UUID(str(raw)) if raw else None
+    except (ValueError, AttributeError):
+        return None
 
 
 class TestEngineService:
@@ -29,46 +39,43 @@ class TestEngineService:
         )
         test = test_result.scalar_one()
 
-        # Build correct answer map
-        correct_map: dict[str, str] = {}
-        for q in test.questions:
-            for opt in q.options:
-                if opt.is_correct:
-                    correct_map[str(q.id)] = str(opt.id)
+        # Вопросы этого теста и их варианты: {question_id: {option_id: is_correct}}
+        options_by_question: dict[UUID, dict[UUID, bool]] = {
+            q.id: {o.id: bool(o.is_correct) for o in q.options} for q in test.questions
+        }
 
         correct_count = 0
         total = len(test.questions)
 
-        for ans in answers:
-            q_id_raw = ans.get("question_id")
-            opt_id_raw = ans.get("option_id")
+        # Просрочка: таймер на клиенте автосдаёт тест, поэтому даём запас на
+        # сеть и медленный телефон; всё, что сильно позже лимита, — подмена.
+        overdue = False
+        if test.time_limit_minutes and attempt.started_at:
+            deadline = attempt.started_at + timedelta(minutes=test.time_limit_minutes) + LATE_SUBMIT_GRACE
+            overdue = datetime.now(timezone.utc) > deadline
 
-            # Convert to UUID objects (model columns are Mapped[uuid.UUID])
-            try:
-                q_uuid = UUID(str(q_id_raw)) if q_id_raw else None
-            except (ValueError, AttributeError):
-                q_uuid = None
+        # Один ответ на вопрос: учитываем только первый ответ на каждый вопрос
+        # этого теста, вариант должен принадлежать именно этому вопросу.
+        # Раньше можно было прислать все варианты сразу и получить 100%.
+        seen: set[UUID] = set()
+        for ans in answers if not overdue else []:
+            q_uuid = _as_uuid(ans.get("question_id"))
+            opt_uuid = _as_uuid(ans.get("option_id"))
+            if q_uuid is None or q_uuid not in options_by_question or q_uuid in seen:
+                continue
+            seen.add(q_uuid)
 
-            try:
-                opt_uuid = UUID(str(opt_id_raw)) if opt_id_raw else None
-            except (ValueError, AttributeError):
-                opt_uuid = None
+            q_options = options_by_question[q_uuid]
+            if opt_uuid not in q_options:
+                opt_uuid = None  # чужой/выдуманный вариант = нет ответа
+            is_correct = opt_uuid is not None and q_options[opt_uuid]
 
-            if q_uuid is None:
-                continue  # skip malformed answers
-
-            q_id_str = str(q_uuid)
-            opt_id_str = str(opt_uuid) if opt_uuid else None
-            is_correct = opt_id_str is not None and correct_map.get(q_id_str) == opt_id_str
-
-            answer_record = TestAttemptAnswer(
+            self.db.add(TestAttemptAnswer(
                 attempt_id=attempt.id,
                 question_id=q_uuid,
                 selected_option_id=opt_uuid,
                 is_correct=is_correct,
-            )
-            self.db.add(answer_record)
-
+            ))
             if is_correct:
                 correct_count += 1
 

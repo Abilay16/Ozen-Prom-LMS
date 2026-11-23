@@ -142,7 +142,9 @@ async def upload_excel(batch_id: UUID, db: DB, admin: CurrentSuperAdmin, file: U
 
     upload_dir = os.path.join(settings.STORAGE_LOCAL_PATH, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, f"batch_{batch_id}_{file.filename}")
+    # Имя файла от клиента в путь не подставляем (каталоги/«..» в имени давали 500).
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".xlsx"
+    file_path = os.path.join(upload_dir, f"batch_{batch_id}{ext}")
 
     async with aiofiles.open(file_path, "wb") as f:
         content = await file.read()

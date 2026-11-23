@@ -581,3 +581,35 @@ def test_names_match_surname_and_firstname_subset():
 def test_names_no_match_single_token():
     """Single-token cert name (surname only) is rejected to prevent false positives."""
     assert not names_match("АЛИЕВ", "Алиев Абылай Илиясулы")
+
+
+async def test_login_blocked_after_too_many_failures(http, db):
+    """Подбор пароля: после 10 неудачных попыток логин блокируется даже с верным паролем."""
+    from app.core import rate_limit
+    admin, _ = await make_admin(db)
+    from app.core.security import hash_password
+    admin.password_hash = hash_password("Right-pass-1")
+    await db.commit()
+    rate_limit.reset(admin.login)
+    try:
+        for _ in range(rate_limit.MAX_FAILURES):
+            r = await http.post("/api/v1/auth/login", json={"login": admin.login, "password": "wrong"})
+            assert r.status_code == 401
+        r = await http.post("/api/v1/auth/login", json={"login": admin.login, "password": "Right-pass-1"})
+        assert r.status_code == 429, r.text
+    finally:
+        rate_limit.reset(admin.login)
+
+
+async def test_successful_login_resets_failure_counter(http, db):
+    from app.core import rate_limit
+    from app.core.security import hash_password
+    admin, _ = await make_admin(db)
+    admin.password_hash = hash_password("Right-pass-2")
+    await db.commit()
+    rate_limit.reset(admin.login)
+    for _ in range(rate_limit.MAX_FAILURES - 1):
+        await http.post("/api/v1/auth/login", json={"login": admin.login, "password": "wrong"})
+    r = await http.post("/api/v1/auth/login", json={"login": admin.login, "password": "Right-pass-2"})
+    assert r.status_code == 200, r.text
+    assert not rate_limit.is_blocked(admin.login)

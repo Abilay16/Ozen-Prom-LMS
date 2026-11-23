@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/services/api'
 import ResultPage from './ResultPage.vue'
@@ -76,20 +76,27 @@ const submitted = ref(false)
 const result = ref(null)
 const answers = ref({})
 
-// Timer
+const KEY_DATA = 'testData_' + route.params.attemptId
+const KEY_END = 'testEndTime_' + route.params.attemptId
+const KEY_ANSWERS = 'testAnswers_' + route.params.attemptId
+
+// Timer. Оставшееся время всегда считаем от фиксированного момента окончания:
+// в фоновой вкладке/на заблокированном телефоне setInterval срабатывает реже,
+// и счётчик «минус секунда за тик» отставал от реального времени (а сервер
+// проверяет лимит по своим часам).
 const timeLeft = ref(0)   // seconds remaining
 let timerInterval = null
 
-function startTimer(seconds) {
-  timeLeft.value = seconds
-  timerInterval = setInterval(() => {
-    timeLeft.value--
-    sessionStorage.setItem('testEndTime_' + route.params.attemptId, Date.now() + timeLeft.value * 1000)
+function startTimer(endTime) {
+  const tick = () => {
+    timeLeft.value = Math.max(0, Math.ceil((endTime - Date.now()) / 1000))
     if (timeLeft.value <= 0) {
       clearInterval(timerInterval)
       submitTest(true)
     }
-  }, 1000)
+  }
+  tick()
+  timerInterval = setInterval(tick, 1000)
 }
 
 const timerLabel = computed(() => {
@@ -110,9 +117,9 @@ onMounted(async () => {
   const state = history.state
   if (state?.testData) {
     testData.value = state.testData
-    sessionStorage.setItem('testData_' + route.params.attemptId, JSON.stringify(state.testData))
+    sessionStorage.setItem(KEY_DATA, JSON.stringify(state.testData))
   } else {
-    const stored = sessionStorage.getItem('testData_' + route.params.attemptId)
+    const stored = sessionStorage.getItem(KEY_DATA)
     if (stored) {
       try { testData.value = JSON.parse(stored) } catch { router.replace('/my/courses'); return }
     } else {
@@ -121,25 +128,30 @@ onMounted(async () => {
     }
   }
 
+  // Ответы переживают перезагрузку страницы (раньше F5 стирал все выбранные ответы).
+  try { answers.value = JSON.parse(sessionStorage.getItem(KEY_ANSWERS) || '{}') } catch { answers.value = {} }
+
+  loading.value = false
+
   // Start timer if test has a time limit
   const limitMinutes = testData.value?.time_limit_minutes
   if (limitMinutes > 0) {
-    const savedEnd = sessionStorage.getItem('testEndTime_' + route.params.attemptId)
-    let remaining
-    if (savedEnd) {
-      remaining = Math.max(0, Math.round((Number(savedEnd) - Date.now()) / 1000))
-    } else {
-      remaining = limitMinutes * 60
-      sessionStorage.setItem('testEndTime_' + route.params.attemptId, Date.now() + remaining * 1000)
+    let endTime = Number(sessionStorage.getItem(KEY_END))
+    if (!endTime) {
+      endTime = Date.now() + limitMinutes * 60 * 1000
+      sessionStorage.setItem(KEY_END, String(endTime))
     }
-    if (remaining > 0) startTimer(remaining)
-    else { router.replace('/my/courses'); return }
+    // Если время вышло, пока страница была закрыта, — сдаём то, что есть,
+    // а не бросаем попытку незавершённой (она бы навсегда осталась «в процессе»).
+    startTimer(endTime)
   }
-
-  loading.value = false
 })
 
 onUnmounted(() => clearInterval(timerInterval))
+
+watch(answers, val => {
+  try { sessionStorage.setItem(KEY_ANSWERS, JSON.stringify(val)) } catch {}
+}, { deep: true })
 
 const answered = computed(() => Object.keys(answers.value).length)
 
@@ -147,8 +159,6 @@ async function submitTest(isAutoSubmit = false) {
   if (submitting.value) return
   submitting.value = true
   clearInterval(timerInterval)
-  sessionStorage.removeItem('testData_' + route.params.attemptId)
-  sessionStorage.removeItem('testEndTime_' + route.params.attemptId)
   try {
     const payload = testData.value.questions.map(q => ({
       question_id: q.id,
@@ -157,6 +167,9 @@ async function submitTest(isAutoSubmit = false) {
     const { data } = await api.post(`/learner/me/tests/${route.params.attemptId}/submit`, { answers: payload })
     result.value = data
     submitted.value = true
+    // Чистим черновик только после успешной сдачи: если сеть упала,
+    // ответы и таймер останутся и можно повторить отправку.
+    for (const k of [KEY_DATA, KEY_END, KEY_ANSWERS]) sessionStorage.removeItem(k)
   } catch (e) {
     if (!isAutoSubmit) toast.error(apiErrorMessage(e))
     else router.replace('/my/courses')

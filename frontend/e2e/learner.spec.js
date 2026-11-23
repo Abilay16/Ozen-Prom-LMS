@@ -15,7 +15,13 @@ test('обучающийся проходит тест и получает «Т�
 
   const correct = page.getByText('Верно', { exact: true })
   await expect(correct).toHaveCount(3)
-  for (let i = 0; i < 3; i++) await correct.nth(i).click()
+  await correct.nth(0).click()
+  await correct.nth(1).click()
+
+  // Перезагрузка посреди теста не стирает выбранные ответы.
+  await page.reload()
+  await expect(page.getByText('2 / 3 ответов')).toBeVisible()
+  await correct.nth(2).click()
   await expect(page.getByText('3 / 3 ответов')).toBeVisible()
 
   await page.getByRole('button', { name: 'Завершить тест' }).click()

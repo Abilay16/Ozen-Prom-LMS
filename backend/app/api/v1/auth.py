@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -9,6 +10,7 @@ from app.api.deps import DB
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.exceptions import UnauthorizedError
 from app.models.user import User, AdminUser
+from app.core import rate_limit
 
 router = APIRouter()
 
@@ -37,10 +39,19 @@ class RefreshRequest(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: DB):
     """Login for both admin and learner. Returns role in response."""
+    if rate_limit.is_blocked(body.login):
+        raise HTTPException(status_code=429, detail="Слишком много неудачных попыток входа. Подождите 15 минут.")
+
+    # bcrypt — тяжёлая CPU-операция: в event loop она останавливала весь
+    # бэкенд на время проверки; выносим в пул потоков.
+    async def password_ok(hashed: str) -> bool:
+        return await run_in_threadpool(verify_password, body.password, hashed)
+
     # Try admin first (case-insensitive login)
     result = await db.execute(select(AdminUser).where(AdminUser.login == body.login.strip().lower()))
     admin = result.scalar_one_or_none()
-    if admin and admin.is_active and verify_password(body.password, admin.password_hash):
+    if admin and admin.is_active and await password_ok(admin.password_hash):
+        rate_limit.reset(body.login)
         # Save values before commit (expire_on_commit in some sessions would expire them)
         admin_id = str(admin.id)
         admin_full_name = admin.full_name
@@ -65,7 +76,8 @@ async def login(body: LoginRequest, db: DB):
     # Try learner (case-insensitive login)
     result = await db.execute(select(User).where(User.login == body.login.strip().lower()))
     user = result.scalar_one_or_none()
-    if user and user.is_active and verify_password(body.password, user.password_hash):
+    if user and user.is_active and await password_ok(user.password_hash):
+        rate_limit.reset(body.login)
         # Save values before commit
         user_id = str(user.id)
         user_full_name = user.full_name
@@ -81,6 +93,7 @@ async def login(body: LoginRequest, db: DB):
             full_name=user_full_name,
         )
 
+    rate_limit.register_failure(body.login)
     raise UnauthorizedError("Неверный логин или пароль")
 
 

@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, org_scope_id, DB
@@ -378,6 +378,13 @@ async def get_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin):
 async def update_protocol(protocol_id: UUID, data: ProtocolUpdate, db: DB, admin: CurrentSuperAdmin):
     protocol = await _get_protocol_or_404(protocol_id, db)
     updates = data.model_dump(exclude_unset=True)
+    # Статус через PATCH меняется только «подписан → архив». На подпись —
+    # через request-signatures, «подписан» — только подписью комиссии с ЭЦП.
+    # Раньше здесь можно было выставить signed прямо из черновика.
+    new_status = updates.get("status")
+    if new_status is not None and new_status != protocol.status:
+        if not (protocol.status == ProtocolStatus.signed and new_status == ProtocolStatus.archived):
+            raise ConflictError("Статус протокола меняется только отправкой на подпись и подписью комиссии")
     if protocol.status == ProtocolStatus.archived:
         raise ConflictError("Нельзя редактировать архивный протокол")
     if protocol.status in (ProtocolStatus.signed, ProtocolStatus.awaiting_signatures):
@@ -518,6 +525,10 @@ async def sign_protocol(protocol_id: UUID, db: DB, admin: CurrentAdmin,
     - Members (role=member) can sign at any time while awaiting_signatures.
     - Chair can sign ONLY after all members have signed → triggers status = signed.
     """
+    # Блокируем строку протокола до конца транзакции: двойной клик «Подписать»
+    # шёл двумя параллельными запросами, оба видели слот неподписанным и оба
+    # выдавали удостоверения (второй падал 500 на уникальности номера).
+    await db.execute(select(Protocol.id).where(Protocol.id == protocol_id).with_for_update())
     protocol = await _get_protocol_or_404(protocol_id, db)
     if protocol.status != ProtocolStatus.awaiting_signatures:
         raise ConflictError("Протокол не находится на стадии подписания")
@@ -820,6 +831,9 @@ async def _do_issue_certificates(protocol: Protocol, db) -> tuple[list[str], lis
     code = training_type.name_short.upper().replace(" ", "") if training_type else "CERT"
     date_str = protocol.exam_date.strftime("%Y%m%d")
     prefix = f"{code}-{date_str}-"
+    # Два протокола одного типа с одной датой экзамена, подписанные
+    # одновременно, иначе посчитали бы одинаковый max и выдали те же номера.
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:p))"), {"p": prefix})
     # The old scheme picked 4 random digits (str(uuid4().int)[:4]), which
     # only has ~10,000 distinct values per training type per day — with the
     # certificate_number column UNIQUE, a collision aborted the whole insert

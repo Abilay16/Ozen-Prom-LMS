@@ -27,10 +27,11 @@ test('несуществующее удостоверение — «Недейс
 
 test('неверный пароль — понятная ошибка, остаёмся на входе', async ({ page }) => {
   await page.goto('/login')
-  await page.locator('#login').fill('e2e_admin')
+  // Отдельный логин: неудачные попытки копятся в защите от подбора пароля.
+  await page.locator('#login').fill('e2e_wrong_password_check')
   await page.locator('#password').fill('wrong-password')
   await page.getByRole('button', { name: 'Войти' }).click()
-  await expect(page.locator('.login-screen')).toContainText(/невер/i)
+  await expect(page.locator('.login-screen')).toContainText(/неверн|слишком много/i)
   await expect(page).toHaveURL(/\/login/)
 })
 

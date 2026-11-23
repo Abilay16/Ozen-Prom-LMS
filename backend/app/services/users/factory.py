@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -29,17 +29,16 @@ class UserFactoryService:
             if not result.scalar_one_or_none():
                 return candidate
 
-        import random as _r
-        suffix = "".join(_r.choices(string.digits, k=4))
+        suffix = "".join(secrets.choice(string.digits) for _ in range(4))
         return f"{base}{suffix}"
 
     @staticmethod
     def generate_password() -> str:
-        # 3 letters + 3 digits — easy to remember
-        letters = random.choices(string.ascii_lowercase, k=3)
-        digits = random.choices(string.digits, k=3)
-        combined = letters + digits
-        random.shuffle(combined)
+        # 3 letters + 3 digits — easy to remember. secrets, а не random:
+        # random предсказуем и для паролей не годится.
+        rnd = secrets.SystemRandom()
+        combined = [rnd.choice(string.ascii_lowercase) for _ in range(3)] + [rnd.choice(string.digits) for _ in range(3)]
+        rnd.shuffle(combined)
         return "".join(combined)
 
     @staticmethod
