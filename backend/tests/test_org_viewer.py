@@ -100,3 +100,25 @@ async def test_regular_admin_unaffected_sees_all_organizations(http, db):
     assert resp.status_code == 200, resp.text
     names = {u["full_name"] for u in resp.json()}
     assert {"Из D", "Из E"}.issubset(names)
+
+
+async def test_created_admin_without_password_gets_generated_one_back(http, db):
+    """Без ручного пароля сервер генерирует его и обязан вернуть — иначе аккаунт не войти."""
+    _, token = await make_admin(db, is_superadmin=True)
+    await db.commit()
+    resp = await http.post("/api/v1/admin/admin-users", headers=auth(token),
+                           json={"full_name": "Новый Член Комиссии", "is_commission_eligible": True})
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["generated_password"] and len(body["generated_password"]) == 6
+    login = await http.post("/api/v1/auth/login", json={"login": body["login"], "password": body["generated_password"]})
+    assert login.status_code == 200, login.text
+
+
+async def test_created_admin_with_own_password_not_echoed(http, db):
+    _, token = await make_admin(db, is_superadmin=True)
+    await db.commit()
+    resp = await http.post("/api/v1/admin/admin-users", headers=auth(token),
+                           json={"full_name": "Админ С Паролем", "password": "Own-pass-123"})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["generated_password"] is None

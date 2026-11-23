@@ -4,10 +4,11 @@ from typing import Optional
 from datetime import date, datetime
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.api.pagination import paged
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, org_scope_id, DB
 from app.models.certificate import Certificate
 from app.models.user import User
@@ -84,6 +85,7 @@ async def list_certificates(
     user_id: Optional[UUID] = Query(None),
     training_type_id: Optional[UUID] = Query(None),
     search: Optional[str] = Query(None),
+    response: Response = None,
     skip: int = 0,
     limit: int = 50,
 ):
@@ -97,15 +99,14 @@ async def list_certificates(
     if training_type_id:
         q = q.where(Certificate.training_type_id == training_type_id)
     if search:
-        q = q.where(Certificate.full_name.ilike(f"%{search}%"))
+        term = f"%{search.strip()}%"
+        q = q.where(Certificate.full_name.ilike(term) | Certificate.certificate_number.ilike(term))
     # Certificates have no organization FK of their own — scope an org
     # viewer via the issuing user's current organization.
     org_id = org_scope_id(admin)
     if org_id:
         q = q.join(User, Certificate.user_id == User.id).where(User.organization_id == org_id)
-    q = q.offset(skip).limit(limit)
-    result = await db.execute(q)
-    return result.scalars().all()
+    return await paged(db, q, response, skip, limit)
 
 
 @router.post("", status_code=201, response_model=CertificateOut)

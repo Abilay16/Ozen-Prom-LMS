@@ -2,10 +2,11 @@ import os
 from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel, Field, model_validator
-from fastapi import APIRouter, Query, UploadFile, File, HTTPException
+from fastapi import APIRouter, Query, Response, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 
+from app.api.pagination import paged
 from app.api.deps import CurrentSuperAdmin as CurrentAdmin, CurrentViewerAdmin, org_scope_id, DB
 from app.models.user import User
 from app.core.security import hash_password
@@ -137,6 +138,7 @@ async def list_users(
     search: Optional[str] = Query(None),
     organization_id: Optional[UUID] = Query(None),
     is_active: Optional[bool] = Query(None),
+    response: Response = None,
     skip: int = 0,
     limit: int = 50,
 ):
@@ -153,9 +155,8 @@ async def list_users(
         q = q.where(User.organization_id == organization_id)
     if is_active is not None:
         q = q.where(User.is_active == is_active)
-    q = q.offset(skip).limit(limit).order_by(User.full_name)
-    result = await db.execute(q)
-    out = [UserOut.model_validate(u) for u in result.scalars().all()]
+    q = q.order_by(User.full_name, User.id)
+    out = [UserOut.model_validate(u) for u in await paged(db, q, response, skip, limit)]
     if org_id:
         # Наблюдатель только смотрит: пароли сотрудников ему не отдаём,
         # иначе он может войти под сотрудником и пройти тест за него.

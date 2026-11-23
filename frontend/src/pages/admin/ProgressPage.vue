@@ -34,7 +34,6 @@
       <button @click="resetFilters" class="btn-secondary text-sm">Сброс</button>
     </div>
 
-    <div class="text-xs text-gray-400 mb-2">{{ rows.length > 0 ? `Показано: ${rows.length}` : '' }}</div>
 
     <div class="card overflow-x-auto">
       <table class="w-full text-sm">
@@ -85,6 +84,7 @@
           </tr>
         </tbody>
       </table>
+      <LoadMore :shown="rows.length" :total="list.total.value" :loading="list.loadingMore.value" @more="list.loadMore()" />
     </div>
   </div>
 </template>
@@ -95,17 +95,21 @@ import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import LoadMore from '@/components/LoadMore.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
 const { canEdit } = useRole()
 const { confirm } = useConfirm()
 
-const rows = ref([])
 const organizations = ref([])
 const batches = ref([])
-const loading = ref(false)
 const filters = ref({ search: '', organization_id: '', batch_id: '', status: '', date_from: '', date_to: '' })
+
+const list = usePagedList('/admin/progress', () => ({ ...filters.value, search: filters.value.search.trim() }), { pageSize: 100 })
+const rows = list.items
+const loading = list.loading
 
 let debounceTimer = null
 function debouncedLoad() {
@@ -114,18 +118,15 @@ function debouncedLoad() {
 }
 
 onMounted(async () => {
-  const [o, b] = await Promise.all([api.get('/admin/organizations'), api.get('/admin/batches')])
-  organizations.value = o.data
-  batches.value = b.data
-  await load()
+  load()
+  // Справочники для фильтров: ошибка в них не должна ломать сам список.
+  const [o, b] = await Promise.allSettled([api.get('/admin/organizations'), api.get('/admin/batches')])
+  if (o.status === 'fulfilled') organizations.value = o.value.data
+  if (b.status === 'fulfilled') batches.value = b.value.data
 })
 
-async function load() {
-  loading.value = true
-  const params = Object.fromEntries(Object.entries(filters.value).filter(([, v]) => v))
-  const { data } = await api.get('/admin/progress', { params })
-  rows.value = data
-  loading.value = false
+function load() {
+  return list.reload()
 }
 
 function resetFilters() {

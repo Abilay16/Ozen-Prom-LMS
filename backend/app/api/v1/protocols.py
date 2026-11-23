@@ -3,10 +3,11 @@ from typing import Optional
 from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Response, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
+from app.api.pagination import paged
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, org_scope_id, DB
 from app.models.user import User, AdminUser
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
@@ -227,6 +228,8 @@ async def list_protocols(
     organization_id: Optional[UUID] = Query(None),
     batch_id: Optional[UUID] = Query(None),
     status: Optional[ProtocolStatus] = Query(None),
+    search: Optional[str] = Query(None),
+    response: Response = None,
     skip: int = 0,
     limit: int = 50,
 ):
@@ -252,9 +255,12 @@ async def list_protocols(
             (Protocol.organization_id == org_id)
             | ((Protocol.organization_id.is_(None)) & (TrainingBatch.organization_id == org_id))
         )
-    q = q.offset(skip).limit(limit)
-    result = await db.execute(q)
-    protocols = result.scalars().all()
+    if search and search.strip():
+        # Поиск на сервере: раньше страница искала только среди 50 загруженных.
+        term = f"%{search.strip()}%"
+        org_ids = select(Organization.id).where(Organization.name.ilike(term))
+        q = q.where(Protocol.protocol_number.ilike(term) | Protocol.organization_id.in_(org_ids))
+    protocols = await paged(db, q, response, skip, limit)
 
     items = []
     for p in protocols:

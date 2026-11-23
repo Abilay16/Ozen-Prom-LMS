@@ -34,6 +34,13 @@ class AdminUserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdminUserCreated(AdminUserOut):
+    # Пароль, сгенерированный сервером, — отдаётся один раз при создании.
+    # Раньше он нигде не показывался, и аккаунт без ручного пароля был
+    # непригоден для входа.
+    generated_password: Optional[str] = None
+
+
 class AdminUserPatch(BaseModel):
     full_name: Optional[str] = None
     position_title: Optional[str] = None
@@ -67,7 +74,7 @@ async def list_admin_users(
     return result.scalars().all()
 
 
-@router.post("", response_model=AdminUserOut, status_code=201)
+@router.post("", response_model=AdminUserCreated, status_code=201)
 async def create_admin_user(
     data: AdminUserCreate,
     db: DB,
@@ -118,7 +125,10 @@ async def create_admin_user(
     db.add(new_admin)
     await db.commit()
     await db.refresh(new_admin)
-    return new_admin
+    out = AdminUserCreated.model_validate(new_admin)
+    if not data.password:
+        out.generated_password = plain
+    return out
 
 
 @router.patch("/{admin_user_id}", response_model=AdminUserOut)

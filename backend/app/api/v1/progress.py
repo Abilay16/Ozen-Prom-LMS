@@ -1,10 +1,11 @@
 from uuid import UUID
 from typing import Optional
 from datetime import date
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
+from app.api.pagination import paged
 from app.api.deps import CurrentSuperAdmin as CurrentAdmin, CurrentViewerAdmin, org_scope_id, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.attempt import TestAttempt, AttemptStatus
@@ -80,7 +81,9 @@ async def get_progress(
     search: Optional[str] = Query(None),
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
-    limit: int = Query(500),
+    response: Response = None,
+    skip: int = 0,
+    limit: int = Query(100),
 ):
     q = (
         select(UserCourseAssignment)
@@ -110,9 +113,7 @@ async def get_progress(
         from datetime import datetime, timezone
         dt_to = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
         q = q.where(UserCourseAssignment.assigned_at <= dt_to)
-    q = q.limit(limit)
-    result = await db.execute(q)
-    assignments = result.scalars().all()
+    assignments = await paged(db, q, response, skip, limit)
 
     out = []
     for a in assignments:

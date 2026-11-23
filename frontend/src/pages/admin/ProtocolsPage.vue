@@ -13,12 +13,12 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3">
-      <input v-model="search" type="text" placeholder="Поиск по № протокола, организации..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64" />
-      <select v-model="filters.training_type_id" @change="load" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <input v-model="search" @input="debouncedLoad" type="text" placeholder="Поиск по № протокола, организации..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64" />
+      <select v-model="filters.training_type_id" @change="list.reload()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Все типы</option>
         <option v-for="tt in trainingTypes" :key="tt.id" :value="tt.id">{{ tt.name_short }}</option>
       </select>
-      <select v-model="filters.status" @change="load" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <select v-model="filters.status" @change="list.reload()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Все статусы</option>
         <option value="draft">Черновик</option>
         <option value="awaiting_signatures">На подписи</option>
@@ -41,17 +41,16 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-if="loading">
+          <tr v-if="list.loading.value">
             <td colspan="6" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
           <tr v-else-if="protocols.length === 0">
-            <td colspan="6" class="text-center py-8 text-gray-400">Протоколов пока нет</td>
-          </tr>
-          <tr v-else-if="filteredProtocols.length === 0">
-            <td colspan="6" class="text-center py-8 text-gray-400">Ничего не найдено по этому запросу.</td>
+            <td colspan="6" class="text-center py-8 text-gray-400">
+              {{ search || filters.status || filters.training_type_id ? 'Ничего не найдено по этому запросу.' : 'Протоколов пока нет' }}
+            </td>
           </tr>
           <tr
-            v-for="p in filteredProtocols"
+            v-for="p in protocols"
             :key="p.id"
             class="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
             @click="$router.push(`/admin/protocols/${p.id}`)"
@@ -76,49 +75,44 @@
           </tr>
         </tbody>
       </table>
+      <LoadMore :shown="protocols.length" :total="list.total.value" :loading="list.loadingMore.value" @more="list.loadMore()" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import LoadMore from '@/components/LoadMore.vue'
 import { useRole } from '@/composables/useRole'
+import { usePagedList } from '@/composables/usePagedList'
 
 const { canEdit } = useRole()
-const protocols = ref([])
 const trainingTypes = ref([])
-const loading = ref(true)
 const search = ref('')
 const filters = ref({ training_type_id: '', status: '' })
+let debounceTimer = null
 
-const filteredProtocols = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return protocols.value
-  return protocols.value.filter(p =>
-    p.protocol_number?.toLowerCase().includes(q) ||
-    p.organization?.name?.toLowerCase().includes(q)
-  )
-})
+// Поиск — на сервере: раньше искали только среди 50 загруженных протоколов.
+const list = usePagedList('/admin/protocols', () => ({
+  search: search.value.trim(),
+  training_type_id: filters.value.training_type_id,
+  status: filters.value.status,
+}))
+const protocols = list.items
 
-async function load() {
-  loading.value = true
-  try {
-    const params = {}
-    if (filters.value.training_type_id) params.training_type_id = filters.value.training_type_id
-    if (filters.value.status) params.status = filters.value.status
-    const res = await api.get('/admin/protocols', { params })
-    protocols.value = res.data
-  } finally {
-    loading.value = false
-  }
+function debouncedLoad() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => list.reload(), 350)
 }
 
 onMounted(async () => {
-  const [ttRes] = await Promise.all([api.get('/admin/training-types'), load()])
-  trainingTypes.value = ttRes.data
+  list.reload()
+  try {
+    trainingTypes.value = (await api.get('/admin/training-types')).data
+  } catch {}
 })
 
 function formatDate(d) {

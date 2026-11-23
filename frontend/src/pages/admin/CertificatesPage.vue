@@ -6,8 +6,8 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3">
-      <input v-model="search" @input="debouncedLoad" placeholder="Поиск по ФИО..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64" />
-      <select v-model="filters.training_type_id" @change="load" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <input v-model="search" @input="debouncedLoad" placeholder="Поиск по ФИО или номеру..." class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64" />
+      <select v-model="filters.training_type_id" @change="list.reload()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Все типы</option>
         <option v-for="tt in trainingTypes" :key="tt.id" :value="tt.id">{{ tt.name_short }}</option>
       </select>
@@ -28,11 +28,11 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-if="loading">
+          <tr v-if="list.loading.value">
             <td colspan="7" class="py-2"><RowsSkeleton :rows="3" /></td>
           </tr>
           <tr v-else-if="certs.length === 0">
-            <td colspan="7" class="text-center py-8 text-gray-400">Удостоверений пока нет</td>
+            <td colspan="7" class="text-center py-8 text-gray-400">{{ search || filters.training_type_id ? 'Ничего не найдено по этому запросу.' : 'Удостоверений пока нет' }}</td>
           </tr>
           <tr
             v-for="c in certs"
@@ -59,6 +59,7 @@
           </tr>
         </tbody>
       </table>
+      <LoadMore :shown="certs.length" :total="list.total.value" :loading="list.loadingMore.value" @more="list.loadMore()" />
     </div>
   </div>
 </template>
@@ -67,36 +68,30 @@
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import LoadMore from '@/components/LoadMore.vue'
+import { usePagedList } from '@/composables/usePagedList'
 
-const certs = ref([])
 const trainingTypes = ref([])
-const loading = ref(true)
 const search = ref('')
 const filters = ref({ training_type_id: '' })
 let debounceTimer = null
 
-async function load() {
-  loading.value = true
-  try {
-    const params = {}
-    if (search.value) params.search = search.value
-    if (filters.value.training_type_id) params.training_type_id = filters.value.training_type_id
-    const res = await api.get('/admin/certificates', { params })
-    certs.value = res.data
-  } finally {
-    loading.value = false
-  }
-}
+const list = usePagedList('/admin/certificates', () => ({
+  search: search.value.trim(),
+  training_type_id: filters.value.training_type_id,
+}))
+const certs = list.items
 
 function debouncedLoad() {
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(load, 400)
+  debounceTimer = setTimeout(() => list.reload(), 350)
 }
 
 onMounted(async () => {
-  const ttRes = await api.get('/admin/training-types')
-  trainingTypes.value = ttRes.data
-  await load()
+  list.reload()
+  try {
+    trainingTypes.value = (await api.get('/admin/training-types')).data
+  } catch {}
 })
 
 function formatDate(d) {

@@ -62,6 +62,7 @@
           </tr>
         </tbody>
       </table>
+      <LoadMore :shown="users.length" :total="list.total.value" :loading="list.loadingMore.value" @more="list.loadMore()" />
       </div>
     </div>
 
@@ -156,16 +157,24 @@ import Badge from '@/components/Badge.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
 import { useRole } from '@/composables/useRole'
+import { usePagedList } from '@/composables/usePagedList'
+import LoadMore from '@/components/LoadMore.vue'
 
 const toast = useToast()
 const { canEdit } = useRole()
 const { confirm } = useConfirm()
 
-const users = ref([])
 const orgs = ref([])
-const loading = ref(true)
 const search = ref('')
 const statusFilter = ref('active')
+let debounceTimer = null
+
+const list = usePagedList('/admin/users', () => ({
+  search: search.value.trim(),
+  is_active: statusFilter.value === 'all' ? undefined : statusFilter.value === 'active',
+}))
+const users = list.items
+const loading = list.loading
 const modal = ref(false)
 const saving = ref(false)
 const editing = ref(null)
@@ -178,17 +187,16 @@ function orgName(id) {
   return orgs.value.find(o => o.id === id)?.name || '—'
 }
 
-async function load() {
-  loading.value = true
+async function loadOrgs() {
   try {
-    const isActiveParam = statusFilter.value === 'all' ? undefined : statusFilter.value === 'active'
-    const [usersRes, orgsRes] = await Promise.all([
-      api.get('/admin/users', { params: { search: search.value || undefined, is_active: isActiveParam, limit: 500 } }),
-      api.get('/admin/organizations'),
-    ])
-    users.value = usersRes.data
-    orgs.value = orgsRes.data
-  } finally { loading.value = false }
+    orgs.value = (await api.get('/admin/organizations')).data
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+  }
+}
+
+function load() {
+  return list.reload()
 }
 
 function openCreate() {
@@ -246,6 +254,7 @@ async function save() {
       if (form.value.organization_name) payload.organization_name = form.value.organization_name
       const { data } = await api.post('/admin/users', payload)
       users.value.unshift(data)
+      list.total.value++
     } else {
       // Create admin / commission member / org viewer
       const payload = {
@@ -257,8 +266,12 @@ async function save() {
         is_org_viewer: form.value.role === 'org_viewer',
         organization_id: form.value.role === 'org_viewer' ? form.value.org_viewer_organization_id : undefined,
       }
-      await api.post('/admin/admin-users', payload)
-      toast.success(`Администратор создан. Логин: ${form.value.login || '(см. в базе)'}`)
+      const { data } = await api.post('/admin/admin-users', payload)
+      // Сгенерированный пароль сервер отдаёт один раз — показываем, пока есть время записать.
+      toast.success(
+        `Аккаунт создан. Логин: ${data.login}` + (data.generated_password ? `, пароль: ${data.generated_password}` : ''),
+        30000,
+      )
     }
     modal.value = false
   } catch (e) {
@@ -266,8 +279,12 @@ async function save() {
   } finally { saving.value = false }
 }
 
-onMounted(load)
-watch(search, () => setTimeout(load, 300))
+onMounted(() => { load(); loadOrgs() })
+// Раньше каждая буква в поиске запускала свой запрос без отмены предыдущего.
+watch(search, () => {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(load, 300)
+})
 watch(statusFilter, load)
 
 async function handlePhotoFile(event) {
