@@ -73,13 +73,14 @@
 </template>
 
 <script setup>
+import { useRole } from '@/composables/useRole'
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
 
 const toast = useToast()
-const isCommission = localStorage.getItem('is_commission') === '1'
+const { isCommission } = useRole()
 const users = ref([])
 const loading = ref(true)
 

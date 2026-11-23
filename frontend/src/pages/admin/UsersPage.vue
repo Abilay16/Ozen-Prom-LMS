@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">Пользователи</h1>
-      <button @click="openCreate()" class="btn-primary">+ Добавить пользователя</button>
+      <h1 class="text-2xl font-bold">{{ canEdit ? 'Пользователи' : 'Сотрудники' }}</h1>
+      <button v-if="canEdit" @click="openCreate()" class="btn-primary">+ Добавить пользователя</button>
     </div>
     <div class="card">
       <div class="flex gap-4 mb-4">
@@ -21,11 +21,11 @@
             <th class="py-3 px-2 font-semibold text-gray-600">Фото</th>
             <th class="py-3 px-2 font-semibold text-gray-600">ФИО</th>
             <th class="py-3 px-2 font-semibold text-gray-600">Логин</th>
-            <th class="py-3 px-2 font-semibold text-gray-600">Пароль</th>
+            <th v-if="canEdit" class="py-3 px-2 font-semibold text-gray-600">Пароль</th>
             <th class="py-3 px-2 font-semibold text-gray-600">Должность</th>
             <th class="py-3 px-2 font-semibold text-gray-600">Организация</th>
             <th class="py-3 px-2 font-semibold text-gray-600">Статус</th>
-            <th class="py-3 px-2 font-semibold text-gray-600"></th>
+            <th v-if="canEdit" class="py-3 px-2 font-semibold text-gray-600"></th>
           </tr>
         </thead>
         <tbody>
@@ -38,7 +38,7 @@
             </td>
             <td class="py-3 px-2">{{ u.full_name }}</td>
             <td class="py-3 px-2 font-mono text-gray-500">{{ u.login }}</td>
-            <td class="py-3 px-2">
+            <td v-if="canEdit" class="py-3 px-2">
               <span v-if="u.plain_password" class="font-mono text-gray-700">{{ u.plain_password }}</span>
               <span v-else class="text-gray-300 text-xs italic">не задан</span>
             </td>
@@ -49,7 +49,7 @@
                 {{ u.is_active ? 'Активен' : 'Неактивен' }}
               </Badge>
             </td>
-            <td class="py-3 px-2">
+            <td v-if="canEdit" class="py-3 px-2">
               <button @click="openEdit(u)" class="text-xs text-blue-600 hover:underline">Изменить</button>
               <button v-if="!u.is_active" @click="reactivateUser(u)" class="text-xs text-green-600 hover:underline ml-2">Активировать</button>
               <button @click="deleteUser(u)" class="text-xs text-red-400 hover:text-red-600 hover:underline ml-2">Удалить навсегда</button>
@@ -57,7 +57,7 @@
           </tr>
           <tr v-if="!users.length">
             <td colspan="8" class="text-center text-gray-400 py-10">
-              {{ search ? 'Никого не найдено по этому запросу.' : 'Нет пользователей. Добавьте первого.' }}
+              {{ search ? 'Никого не найдено по этому запросу.' : (canEdit ? 'Нет пользователей. Добавьте первого.' : 'Сотрудников пока нет.') }}
             </td>
           </tr>
         </tbody>
@@ -155,8 +155,10 @@ import Modal from '@/components/Modal.vue'
 import Badge from '@/components/Badge.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
+const { canEdit } = useRole()
 const { confirm } = useConfirm()
 
 const users = ref([])

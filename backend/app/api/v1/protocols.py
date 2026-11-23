@@ -195,7 +195,9 @@ class ProtocolListItem(BaseModel):
 
 def _load_options():
     return (
-        selectinload(Protocol.commission_members).selectinload(ProtocolCommissionMember.admin_user),
+        # admin_user НЕ подгружаем: протокол отдаётся как ORM-объект, и
+        # подгруженный AdminUser уходил в JSON вместе с password_hash.
+        selectinload(Protocol.commission_members),
         selectinload(Protocol.participants).selectinload(ProtocolParticipant.certificate),
         selectinload(Protocol.training_type),
         selectinload(Protocol.organization),

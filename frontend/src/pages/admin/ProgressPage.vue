@@ -70,7 +70,7 @@
             </td>
             <td class="px-4 py-3">
               <button
-                v-if="row.status === 'failed' || row.status === 'in_progress'"
+                v-if="canEdit && (row.status === 'failed' || row.status === 'in_progress')"
                 @click="allowRetake(row.id)"
                 class="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded font-medium"
               >↺ Пересдача</button>
@@ -95,8 +95,10 @@ import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
+const { canEdit } = useRole()
 const { confirm } = useConfirm()
 
 const rows = ref([])

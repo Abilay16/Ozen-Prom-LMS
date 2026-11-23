@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div>
     <RouterLink to="/admin/batches" class="text-blue-600 text-sm hover:underline">&larr; Назад к потокам</RouterLink>
 
@@ -40,12 +40,13 @@
       </div>
     </div>
 
+    <template v-if="canEdit">
     <!-- Excel format hint -->
     <div class="card mb-4 bg-blue-50 border border-blue-200">
-      <div class="text-sm font-semibold text-blue-800 mb-1"> Формат Excel-файла</div>
+      <div class="text-sm font-semibold text-blue-800 mb-1">Формат Excel-файла</div>
       <div class="text-sm text-blue-700">
         Колонки: <strong>ФИО</strong> | <strong>Должность</strong> | <strong>Организация</strong><br/>
-        Первая строка  заголовки. Пример колонок: "ФИО", "Должность", "Организация".
+        Первая строка — заголовки. Пример колонок: "ФИО", "Должность", "Организация".
       </div>
     </div>
 
@@ -64,6 +65,7 @@
       </div>
       <p v-if="uploadError" class="mt-2 text-sm text-red-500">{{ uploadError }}</p>
     </div>
+    </template>
 
     <!-- Manual add user modal -->
     <Modal v-model="manualModal" title="Добавить сотрудника вручную" max-width="max-w-md">
@@ -172,7 +174,7 @@
 
       <div class="mt-4 pt-4 border-t flex items-center gap-4">
         <button @click="confirmImport" :disabled="confirming" class="btn-primary">
-          {{ confirming ? 'Создаём пользователей...' : `Подтвердить  создать пользователей (${preview.ok + preview.manual_review})` }}
+          {{ confirming ? 'Создаём пользователей...' : `Подтвердить — создать пользователей (${preview.ok + preview.manual_review})` }}
         </button>
       </div>
     </div>
@@ -181,7 +183,7 @@
     <div v-if="result" class="card">
       <div class="flex items-center justify-between mb-3">
         <h2 class="font-semibold">3. Логины и пароли</h2>
-        <button @click="downloadCredentials" class="btn-secondary text-sm"> Скачать Excel</button>
+        <button @click="downloadCredentials" class="btn-secondary text-sm">Скачать Excel</button>
       </div>
 
       <div class="grid grid-cols-4 gap-3 mb-4 text-center text-sm">
@@ -237,8 +239,10 @@ import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import Modal from '@/components/Modal.vue'
 import Badge from '@/components/Badge.vue'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
+const { canEdit } = useRole()
 const route = useRoute()
 const batchId = route.params.id
 

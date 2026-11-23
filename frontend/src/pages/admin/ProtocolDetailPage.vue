@@ -89,7 +89,7 @@
             >
               🖨 Печать протокола
             </button>
-            <button v-if="isDraft && !isCommission" @click="saveMainForm" :disabled="saving" class="bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 disabled:opacity-50">
+            <button v-if="isDraft && canEdit" @click="saveMainForm" :disabled="saving" class="bg-brand-dark text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90 disabled:opacity-50">
               {{ isNew ? 'Создать протокол' : 'Сохранить' }}
             </button>
           </div>
@@ -108,7 +108,7 @@
               <!-- Sign status -->
               <span v-if="m.signed_at" class="text-green-600 text-xs shrink-0" :title="formatDateTime(m.signed_at)">✓ Подписал</span>
               <span v-else-if="protocol.status === 'awaiting_signatures'" class="text-yellow-500 text-xs shrink-0">⧖ Ожидает</span>
-              <button v-if="protocol.status === 'draft' && !isCommission" @click="removeCommissionMember(m.id)" class="text-red-400 hover:text-red-600 text-xs shrink-0">✕</button>
+              <button v-if="protocol.status === 'draft' && canEdit" @click="removeCommissionMember(m.id)" class="text-red-400 hover:text-red-600 text-xs shrink-0">✕</button>
             </div>
             <!-- EDS stamp for signed members -->
             <div v-if="m.signer_cert_serial" class="mt-2 ml-2">
@@ -123,7 +123,7 @@
             </div>
           </div>
           <!-- Add member form (only in draft, only for superadmin) -->
-          <div v-if="protocol.status === 'draft' && !isCommission" class="mt-3 bg-gray-50 rounded-lg p-3">
+          <div v-if="protocol.status === 'draft' && canEdit" class="mt-3 bg-gray-50 rounded-lg p-3">
             <div class="grid grid-cols-3 gap-2 mb-2">
               <select v-model="newMember.role" class="border border-gray-300 rounded px-2 py-1.5 text-xs">
                 <option value="chair">Председатель</option>
@@ -152,7 +152,7 @@
             />
             <div class="flex gap-2">
               <button
-                v-if="protocol.batch_id && protocol.status === 'draft' && !isCommission"
+                v-if="protocol.batch_id && protocol.status === 'draft' && canEdit"
                 @click="importFromBatch"
                 :disabled="importing"
                 class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
@@ -160,7 +160,7 @@
                 {{ importing ? 'Загрузка...' : '⬇ Загрузить из потока' }}
               </button>
               <button
-                v-if="protocol.status === 'signed' && protocol.participants.some(p => p.result === 'passed' && !p.certificate?.id) && !isCommission"
+                v-if="protocol.status === 'signed' && protocol.participants.some(p => p.result === 'passed' && !p.certificate?.id) && canEdit"
                 @click="issueCertificates"
                 class="text-xs bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700"
               >
@@ -203,7 +203,7 @@
                   <select
                     :value="p.result"
                     @change="updateParticipantResult(p.id, $event.target.value)"
-                    :disabled="protocol.status !== 'draft' || isCommission"
+                    :disabled="protocol.status !== 'draft' || !canEdit"
                     class="border border-gray-300 rounded px-1 py-0.5 text-xs disabled:opacity-50 disabled:bg-gray-50"
                     :class="p.result === 'passed' ? 'text-green-700' : p.result === 'failed' ? 'text-red-700' : ''"
                   >
@@ -215,7 +215,7 @@
                   <router-link v-if="p.certificate?.id" :to="`/admin/certificates/${p.certificate.id}`" class="ml-1 text-blue-500 hover:text-blue-700 text-xs" title="Открыть удостоверение">📄</router-link>
                 </td>
                 <td class="px-2 py-2 text-right">
-                  <button v-if="protocol.status === 'draft' && !isCommission" @click="removeParticipant(p.id)" class="text-red-400 hover:text-red-600">✕</button>
+                  <button v-if="protocol.status === 'draft' && canEdit" @click="removeParticipant(p.id)" class="text-red-400 hover:text-red-600">✕</button>
                 </td>
               </tr>
             </tbody>
@@ -223,7 +223,7 @@
           </div>
 
           <!-- Manual add (collapsed, fallback) -->
-          <div v-if="protocol.status === 'draft' && !isCommission">
+          <div v-if="protocol.status === 'draft' && canEdit">
             <button @click="showManualAdd = !showManualAdd" class="text-xs text-gray-400 hover:text-gray-600 mt-1">
               {{ showManualAdd ? '▲ Скрыть' : '+ Добавить вручную' }}
             </button>
@@ -265,7 +265,7 @@
             <hr />
 
             <!-- DRAFT: send for signatures -->
-            <div v-if="protocol.status === 'draft' && !isCommission">
+            <div v-if="protocol.status === 'draft' && canEdit">
               <p class="text-xs text-gray-500 mb-2">
                 После добавления комиссии и участников — отправьте на подпись.
               </p>
@@ -310,7 +310,7 @@
             <!-- SIGNED -->
             <div v-if="protocol.status === 'signed'">
               <div class="text-green-600 text-sm font-medium text-center py-2">✓ Протокол подписан</div>
-              <button v-if="!isCommission" @click="setStatus('archived')"
+              <button v-if="canEdit" @click="setStatus('archived')"
                       class="w-full bg-gray-400 text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-500 mt-2">
                 Архивировать
               </button>
@@ -323,7 +323,7 @@
               <div>Удостоверений выдано: {{ issuedCount }}</div>
             </div>
 
-            <template v-if="!isCommission">
+            <template v-if="canEdit">
               <hr />
               <button @click="deleteProtocol"
                       class="w-full border border-red-300 text-red-600 py-2 rounded-lg text-sm font-medium hover:bg-red-50">
@@ -349,13 +349,14 @@ import SignatureStamp from '@/components/SignatureStamp.vue'
 import Badge from '@/components/Badge.vue'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
 const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const isCommission = localStorage.getItem('is_commission') === '1'
+const { canEdit } = useRole()
 
 const isNew = computed(() => route.params.id === 'new')
 const isDraft = computed(() => !protocol.value || protocol.value.status === 'draft')

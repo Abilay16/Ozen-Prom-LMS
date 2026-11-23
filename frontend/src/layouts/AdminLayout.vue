@@ -124,13 +124,13 @@
 <script setup>
 import { ref, h } from 'vue'
 import { RouterView, RouterLink, useRouter, useRoute } from 'vue-router'
+import { useRole } from '@/composables/useRole'
 
 const router = useRouter()
 const route = useRoute()
 const sidebarOpen = ref(false)
 const fullName = localStorage.getItem('full_name') || ''
-const isCommission = localStorage.getItem('is_commission') === '1'
-const isOrgViewer = localStorage.getItem('is_org_viewer') === '1'
+const { isCommission, isOrgViewer } = useRole()
 
 function handleLogout() {
   localStorage.clear()

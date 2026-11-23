@@ -277,7 +277,7 @@ async function doImport() {
     const res = await api.post('/admin/medical-exams/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    const { imported, total_parsed, unmatched } = res.data
+    const { imported, unmatched } = res.data
     const unmatchedCount = unmatched?.length ?? 0
     importResult.value = {
       ok: true,

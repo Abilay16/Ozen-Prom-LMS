@@ -149,7 +149,8 @@ router.beforeEach((to, from, next) => {
       return next('/admin/dashboard')
     }
     const allowed = ORG_VIEWER_ALLOWED.some(p => to.path.startsWith(p))
-    if (!allowed) {
+    // Просмотр — да, создание — нет (/admin/protocols/new совпадает с /admin/protocols).
+    if (!allowed || to.path.endsWith('/new')) {
       return next('/admin/dashboard')
     }
   }

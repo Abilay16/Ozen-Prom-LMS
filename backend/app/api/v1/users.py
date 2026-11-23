@@ -1,12 +1,10 @@
 import os
-import uuid as _uuid
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from fastapi import APIRouter, Query, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentSuperAdmin as CurrentAdmin, CurrentViewerAdmin, org_scope_id, DB
 from app.models.user import User
@@ -31,7 +29,8 @@ class UserOut(BaseModel):
     education: Optional[str] = None
     is_active: bool
     plain_password: Optional[str] = None
-    photo_path: Optional[str] = None
+    # Путь на диске сервера — нужен только для вычисления photo_url, наружу не отдаём.
+    photo_path: Optional[str] = Field(default=None, exclude=True)
     photo_url: Optional[str] = None
 
     @model_validator(mode='after')
@@ -123,7 +122,6 @@ async def create_user(data: CreateUserRequest, db: DB, admin: CurrentAdmin):
 
 @router.get("/count")
 async def count_users(db: DB, admin: CurrentViewerAdmin):
-    from sqlalchemy import func
     q = select(func.count()).select_from(User)
     org_id = org_scope_id(admin)
     if org_id:
@@ -132,7 +130,7 @@ async def count_users(db: DB, admin: CurrentViewerAdmin):
     return {"count": result.scalar()}
 
 
-@router.get("")
+@router.get("", response_model=list[UserOut])
 async def list_users(
     db: DB,
     admin: CurrentViewerAdmin,
@@ -157,7 +155,13 @@ async def list_users(
         q = q.where(User.is_active == is_active)
     q = q.offset(skip).limit(limit).order_by(User.full_name)
     result = await db.execute(q)
-    return result.scalars().all()
+    out = [UserOut.model_validate(u) for u in result.scalars().all()]
+    if org_id:
+        # Наблюдатель только смотрит: пароли сотрудников ему не отдаём,
+        # иначе он может войти под сотрудником и пройти тест за него.
+        for u in out:
+            u.plain_password = None
+    return out
 
 
 class UpdateUserRequest(BaseModel):
@@ -168,12 +172,12 @@ class UpdateUserRequest(BaseModel):
     new_password: Optional[str] = None
 
 
-@router.patch("/{user_id}")
+@router.patch("/{user_id}", response_model=UserOut)
 async def update_user(user_id: UUID, data: UpdateUserRequest, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError("Пользователь не найден")
     if data.full_name is not None:
         user.full_name = data.full_name
         user.normalized_full_name = data.full_name.strip().lower()
@@ -199,7 +203,7 @@ async def delete_user(user_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError("Пользователь не найден")
     await db.delete(user)
 
 
@@ -208,7 +212,7 @@ async def reset_password(user_id: UUID, body: ResetPasswordRequest, db: DB, admi
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError("Пользователь не найден")
     user.password_hash = hash_password(body.new_password)
     user.plain_password = body.new_password
     return {"message": "Password updated"}
@@ -221,7 +225,7 @@ async def upload_user_photo(user_id: UUID, db: DB, admin: CurrentAdmin, photo: U
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError("Пользователь не найден")
 
     content = await photo.read()
     if len(content) > _PHOTO_MAX_BYTES:

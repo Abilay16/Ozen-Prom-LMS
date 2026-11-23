@@ -1,15 +1,15 @@
-﻿<template>
+<template>
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Потоки обучения</h1>
-      <button @click="showCreate = true" class="btn-primary">+ Новый поток</button>
+      <button v-if="canEdit" @click="showCreate = true" class="btn-primary">+ Новый поток</button>
     </div>
 
     <Modal v-model="showCreate" title="Новый поток обучения">
       <div class="space-y-4">
         <div>
           <label class="text-sm font-medium text-gray-700">Название потока</label>
-          <input v-model="form.name" class="input-field mt-1" placeholder="Например: КазТрансОйл  май 2026" />
+          <input v-model="form.name" class="input-field mt-1" placeholder="Например: КазТрансОйл — май 2026" />
         </div>
         <div>
           <label class="text-sm font-medium text-gray-700 block mb-2">Виды обучения</label>
@@ -66,7 +66,7 @@
           </RouterLink>
           <div class="flex flex-col items-end gap-2">
             <Badge :variant="statusVariant(b.status)">{{ statusLabel(b.status) }}</Badge>
-            <button @click="deleteBatch(b)" class="text-xs text-red-400 hover:text-red-600">Удалить</button>
+            <button v-if="canEdit" @click="deleteBatch(b)" class="text-xs text-red-400 hover:text-red-600">Удалить</button>
           </div>
         </div>
       </div>
@@ -82,8 +82,10 @@ import { useConfirm } from '@/composables/useConfirm'
 import Modal from '@/components/Modal.vue'
 import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
+const { canEdit } = useRole()
 const { confirm } = useConfirm()
 
 const batches = ref([])
@@ -101,23 +103,31 @@ const filteredBatches = computed(() => {
 
 onMounted(async () => {
   try {
+    // Дисциплины нужны только форме создания — наблюдателю их не грузим.
     const [b, d] = await Promise.all([
       api.get('/admin/batches'),
-      api.get('/admin/disciplines'),
+      canEdit ? api.get('/admin/disciplines') : Promise.resolve({ data: [] }),
     ])
     batches.value = b.data
     disciplines.value = d.data
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
   } finally {
     loading.value = false
   }
 })
 
 async function createBatch() {
-  await api.post('/admin/batches', {
-    name: form.value.name,
-    discipline_ids: form.value.discipline_ids,
-    notes: form.value.notes || null,
-  })
+  try {
+    await api.post('/admin/batches', {
+      name: form.value.name,
+      discipline_ids: form.value.discipline_ids,
+      notes: form.value.notes || null,
+    })
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+    return
+  }
   closeCreate()
   const { data } = await api.get('/admin/batches')
   batches.value = data

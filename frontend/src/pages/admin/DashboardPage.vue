@@ -16,7 +16,41 @@
       />
     </div>
 
-    <div class="card">
+    <!-- Наблюдатель организации: только просмотр, ведём к его разделам -->
+    <div v-if="!canEdit" class="card">
+      <h2 class="font-semibold mb-4">Разделы</h2>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <RouterLink to="/admin/users" class="action-card">
+          <span class="action-icon action-icon--primary">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="8" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 16c.6-2.8 2.8-4.5 5.5-4.5s4.9 1.7 5.5 4.5M13 4.2a3 3 0 0 1 0 5.6M15 11.8c1.3.6 2.2 2 2.5 4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
+          <span>
+            <span class="action-title">Сотрудники</span>
+            <span class="action-hint">Список сотрудников организации</span>
+          </span>
+        </RouterLink>
+        <RouterLink to="/admin/progress" class="action-card">
+          <span class="action-icon action-icon--violet">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M3 16h14M5 13l3.5-4 3 2.5L16 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span>
+            <span class="action-title">Прогресс обучения</span>
+            <span class="action-hint">Кто сдал, кто в процессе</span>
+          </span>
+        </RouterLink>
+        <RouterLink to="/admin/certificates" class="action-card">
+          <span class="action-icon action-icon--teal">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="8" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="m7.5 12-1 5 3.5-1.8 3.5 1.8-1-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </span>
+          <span>
+            <span class="action-title">Удостоверения</span>
+            <span class="action-hint">Выданные и сроки действия</span>
+          </span>
+        </RouterLink>
+      </div>
+    </div>
+
+    <div v-else class="card">
       <h2 class="font-semibold mb-4">Быстрые действия</h2>
       <div class="grid sm:grid-cols-3 gap-3">
         <RouterLink to="/admin/batches" class="action-card">
@@ -57,8 +91,10 @@ import { RouterLink } from 'vue-router'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import StatTile from '@/components/StatTile.vue'
+import { useRole } from '@/composables/useRole'
 
 const toast = useToast()
+const { canEdit } = useRole()
 const stats = ref({ users: 0, batches: 0, passed: 0, inProgress: 0, failed: 0 })
 const loading = ref(true)
 

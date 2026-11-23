@@ -294,10 +294,11 @@ function downloadQrPng() {
 function printPlasticCard() {
   if (!qrCanvas.value || !verifyToken.value) return
   const qrDataUrl = qrCanvas.value.toDataURL('image/png')
-  const fullName = meData.value?.full_name ?? ''
-  const position = meData.value?.position ?? ''
-  const orgName = meData.value?.organization_name ?? ''
-  const url = workerCardUrl()
+  // Данные вставляются в HTML нового окна — экранируем.
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  const fullName = esc(meData.value?.full_name)
+  const position = esc(meData.value?.position)
+  const orgName = esc(meData.value?.organization_name)
 
   const win = window.open('', '_blank', 'width=500,height=350')
   win.document.write(`<!DOCTYPE html>
@@ -350,7 +351,7 @@ function printPlasticCard() {
     <div class="hint">Отсканируйте QR для проверки допусков</div>
   </div>
 </div>
-<script>window.onload=function(){window.print()}<\/script>
+<script>window.onload=function(){window.print()}<${'/'}script>
 </body></html>`)
   win.document.close()
 }

@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-800">Протоколы проверки знаний</h1>
       <router-link
-        v-if="!isCommission"
+        v-if="canEdit"
         to="/admin/protocols/new"
         class="bg-brand-dark text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-opacity-90"
       >
@@ -85,8 +85,9 @@ import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+import { useRole } from '@/composables/useRole'
 
-const isCommission = localStorage.getItem('is_commission') === '1'
+const { canEdit } = useRole()
 const protocols = ref([])
 const trainingTypes = ref([])
 const loading = ref(true)
