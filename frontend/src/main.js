@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+// Шрифты — со своего сервера: без лишних подключений к Google и работают
+// в закрытой сети (корпоративная версия).
+import '@fontsource-variable/inter/wght.css'
 import './assets/main.css'
 
 const app = createApp(App)

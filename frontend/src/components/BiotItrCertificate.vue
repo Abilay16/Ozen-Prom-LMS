@@ -51,6 +51,17 @@
 </template>
 
 <script setup>
+// Шрифты макета сертификата грузятся только вместе с сертификатом.
+// cyrillic-ext — казахские буквы (қ, ә, ө, ұ, ү, і, ғ, ң, һ).
+import '@fontsource/lora/cyrillic-400.css'
+import '@fontsource/lora/cyrillic-ext-400.css'
+import '@fontsource/lora/latin-400.css'
+import '@fontsource/lora/cyrillic-400-italic.css'
+import '@fontsource/lora/cyrillic-ext-400-italic.css'
+import '@fontsource/lora/latin-400-italic.css'
+import '@fontsource/noto-sans/cyrillic-400.css'
+import '@fontsource/noto-sans/cyrillic-ext-400.css'
+import '@fontsource/noto-sans/latin-400.css'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import SignatureStamp from '@/components/SignatureStamp.vue'
 import bgUrl from '@/assets/certificates/biot-itr-bg.jpg'

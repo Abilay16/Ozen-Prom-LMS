@@ -96,6 +96,7 @@
 </template>
 
 <script setup>
+import '@fontsource-variable/manrope/wght.css'
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -170,7 +171,7 @@ async function handleLogin() {
 .brand-mark svg { width: 46px; height: 46px; }
 
 .brand-title {
-  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope Variable', 'Manrope', 'Inter Variable', system-ui, sans-serif;
   font-weight: 800;
   font-size: 1.9rem;
   letter-spacing: -0.01em;
@@ -233,7 +234,7 @@ async function handleLogin() {
 }
 
 .form-title {
-  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope Variable', 'Manrope', 'Inter Variable', system-ui, sans-serif;
   font-weight: 700;
   font-size: 1.3rem;
   color: #101828;

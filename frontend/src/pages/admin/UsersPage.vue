@@ -32,7 +32,7 @@
           <tr v-for="u in users" :key="u.id" class="border-b border-gray-100 hover:bg-gray-50">
             <td class="py-3 px-2">
               <div class="w-9 h-9 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                <img v-if="u.photo_url" :src="u.photo_url" class="w-full h-full object-cover" alt="" />
+                <img v-if="u.photo_url" :src="u.photo_url" loading="lazy" decoding="async" width="36" height="36" class="w-full h-full object-cover" alt="" />
                 <span v-else class="text-lg">👤</span>
               </div>
             </td>
