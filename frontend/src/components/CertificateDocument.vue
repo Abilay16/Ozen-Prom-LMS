@@ -2,9 +2,19 @@
   <div id="certificate">
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- БиОТ для ИТР (3 года) — сертификат вместо удостоверения  -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <BiotItrCertificate
+      v-if="isBiotItr"
+      :cert="cert"
+      :protocol="protocol"
+      :qr-data-url="qrDataUrl"
+    />
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- ПромБез certificate (ID-card format, 2-column)          -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <template v-if="isPromBez">
+    <template v-else-if="isPromBez">
       <div style="font-family:'Times New Roman',serif; font-size:12pt; color:#000; max-width:800px; margin:0 auto; border:2px solid #333;">
 
         <!-- Title row -->
@@ -400,12 +410,24 @@
 <script setup>
 import { computed } from 'vue'
 import SignatureStamp from '@/components/SignatureStamp.vue'
+import BiotItrCertificate from '@/components/BiotItrCertificate.vue'
 
 const props = defineProps({
   cert: { type: Object, required: true },
   protocol: { type: Object, default: null },
   qrDataUrl: { type: String, default: '' },
   verifyUrl: { type: String, default: '' },
+})
+
+// БиОТ для ИТР выдаётся на 3 года (рабочим — на 1 год), поэтому определяем
+// его по сроку действия: от 30 месяцев и больше — это ИТР.
+const isBiotItr = computed(() => {
+  const c = props.cert
+  if (c?.training_type?.code !== 'biot' || !c.issued_date || !c.valid_until) return false
+  const from = new Date(c.issued_date + 'T00:00:00')
+  const to = new Date(c.valid_until + 'T00:00:00')
+  const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
+  return months >= 30
 })
 
 const isPromBez = computed(() => props.cert?.training_type?.code === 'prombez')
