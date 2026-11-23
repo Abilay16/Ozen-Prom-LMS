@@ -43,7 +43,7 @@ async def update_course(course_id: UUID, data: dict, db: DB, admin: CurrentAdmin
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
     if not course:
-        raise NotFoundError("Course not found")
+        raise NotFoundError("Курс не найден")
     allowed = {"name", "description", "target_positions", "duration_hours", "is_active"}
     for k, v in data.items():
         if k in allowed:
@@ -56,7 +56,7 @@ async def delete_course(course_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(Course).where(Course.id == course_id))
     course = result.scalar_one_or_none()
     if not course:
-        raise NotFoundError("Course not found")
+        raise NotFoundError("Курс не найден")
     await db.delete(course)
 
 
@@ -73,7 +73,7 @@ async def get_course_materials(course_id: UUID, db: DB, admin: CurrentAdmin):
 
 @router.get("/{course_id}/test")
 async def get_course_test(course_id: UUID, db: DB, admin: CurrentAdmin):
-    from app.models.test import Test, TestQuestion, TestQuestionOption
+    from app.models.test import Test, TestQuestion
     result = await db.execute(
         select(Test)
         .options(selectinload(Test.questions).selectinload(TestQuestion.options))

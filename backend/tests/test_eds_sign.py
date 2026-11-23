@@ -7,9 +7,7 @@ Tests for:
   3. POST /protocols/{id}/sign  (without CMS)   → backward compat, still works
   4. After signing, commission member response includes cert info fields
 """
-import pytest
-from datetime import datetime, timezone
-from app.models.protocol import ProtocolStatus, CommissionRole, ParticipantResult
+from app.models.protocol import ProtocolStatus, CommissionRole
 from tests.conftest import (
     make_admin, make_training_type, make_protocol, make_commission_member,
     make_fresh_cms_b64,

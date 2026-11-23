@@ -87,3 +87,9 @@ Final_vision_of_project.md
 # !storage/sample_employees.xlsx
 backups/
 Ozen_Prom_LMS_source_code.txt
+
+# Playwright / локальные артефакты
+frontend/test-results/
+frontend/playwright-report/
+.playwright-mcp/
+scratchpad/

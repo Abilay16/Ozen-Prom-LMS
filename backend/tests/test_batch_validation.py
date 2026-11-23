@@ -10,7 +10,6 @@ dates). A later re-import for the same batch/training type additionally
 excludes anyone already certified by an earlier protocol — see
 import_participants_from_batch in app/api/v1/protocols.py.
 """
-import pytest
 from app.models.assignment import AssignmentStatus
 from tests.conftest import (
     make_admin, make_training_type, make_batch_with_users, make_protocol,

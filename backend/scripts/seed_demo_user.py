@@ -93,7 +93,7 @@ async def get_or_create_test(db, course_id, questions_data):
     """Create test with easy questions. questions_data: list of (question_text, [options], correct_index)"""
     existing = (await db.execute(select(Test).where(Test.course_id == course_id))).scalar_one_or_none()
     if existing:
-        print(f"  [skip] test for course already exists")
+        print("  [skip] test for course already exists")
         return existing
 
     test = Test(
@@ -164,7 +164,7 @@ async def get_or_create_assignment(db, user_id, course_id, discipline_id):
     )
     db.add(row)
     await db.flush()
-    print(f"  [+] assignment created")
+    print("  [+] assignment created")
     return row
 
 
@@ -177,7 +177,7 @@ async def complete_assignment(db, user_id, assignment, test):
         )
     )).scalar_one_or_none()
     if existing:
-        print(f"  [skip] passed attempt already exists")
+        print("  [skip] passed attempt already exists")
         return existing
 
     now = datetime.now(timezone.utc)
@@ -221,7 +221,7 @@ async def complete_assignment(db, user_id, assignment, test):
     assignment.status = AssignmentStatus.passed
     assignment.completed_at = now
     await db.flush()
-    print(f"  [+] attempt completed (100%, passed)")
+    print("  [+] attempt completed (100%, passed)")
     return attempt
 
 
@@ -264,7 +264,7 @@ async def create_medical_exam(db, user, org_id):
         select(MedicalExam).where(MedicalExam.user_id == user.id)
     )).scalar_one_or_none()
     if existing:
-        print(f"  [skip] medical exam already exists")
+        print("  [skip] medical exam already exists")
         return existing
 
     med = MedicalExam(
@@ -282,7 +282,7 @@ async def create_medical_exam(db, user, org_id):
     )
     db.add(med)
     await db.flush()
-    print(f"  [+] medical exam (godeen, 2026-03-10)")
+    print("  [+] medical exam (godeen, 2026-03-10)")
     return med
 
 

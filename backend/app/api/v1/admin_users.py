@@ -130,7 +130,7 @@ async def patch_admin_user(
 ):
     au = await db.get(AdminUser, admin_user_id)
     if not au:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin user not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Администратор не найден")
 
     if data.full_name is not None:
         au.full_name = data.full_name

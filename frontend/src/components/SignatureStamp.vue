@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-const props = defineProps({
+defineProps({
   serial:    { type: String, default: '' },
   owner:     { type: String, default: '' },
   validFrom: { type: String, default: null },

@@ -13,7 +13,7 @@ Routes (mounted at /learner/documents):
 import os
 import uuid
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime
 
 from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException

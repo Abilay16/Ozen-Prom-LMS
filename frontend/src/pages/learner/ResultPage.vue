@@ -53,7 +53,7 @@
 <script setup>
 import { RouterLink } from 'vue-router'
 
-const props = defineProps({ result: Object })
+defineProps({ result: Object })
 
 function formatDate(iso) {
   if (!iso) return ''

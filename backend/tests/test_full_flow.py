@@ -31,9 +31,7 @@ Coverage:
     - Order-insensitive comparison
     - Genuine mismatch returns False
 """
-import pytest
 from uuid import uuid4
-from datetime import date
 
 from app.models.protocol import (
     ProtocolStatus, CommissionRole, ParticipantResult, ProtocolParticipant,

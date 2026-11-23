@@ -474,7 +474,7 @@ const isExpired = computed(() => {
 })
 
 function stripLeadingNr(s) {
-  return s ? s.replace(/^[№#]\ */, '') : s
+  return s ? s.replace(/^[№#] */, '') : s
 }
 
 function formatDate(d) {

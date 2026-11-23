@@ -22,7 +22,7 @@ async def allow_retake(assignment_id: UUID, db: DB, admin: CurrentAdmin):
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise NotFoundError("Assignment not found")
+        raise NotFoundError("Назначение не найдено")
 
     # Delete all previous attempts so attempt count resets
     await db.execute(
@@ -107,7 +107,7 @@ async def get_progress(
     if date_from:
         q = q.where(UserCourseAssignment.assigned_at >= date_from)
     if date_to:
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timezone
         dt_to = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
         q = q.where(UserCourseAssignment.assigned_at <= dt_to)
     q = q.limit(limit)

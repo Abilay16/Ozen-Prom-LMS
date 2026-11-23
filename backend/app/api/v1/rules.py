@@ -42,7 +42,7 @@ async def update_rule(rule_id: UUID, data: dict, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(PositionCourseRule).where(PositionCourseRule.id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
-        raise NotFoundError("Rule not found")
+        raise NotFoundError("Правило не найдено")
     allowed = {"position_keyword", "course_id", "priority", "is_active"}
     for k, v in data.items():
         if k in allowed:
@@ -55,5 +55,5 @@ async def delete_rule(rule_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(PositionCourseRule).where(PositionCourseRule.id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
-        raise NotFoundError("Rule not found")
+        raise NotFoundError("Правило не найдено")
     await db.delete(rule)

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, Boolean, Text
+from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 

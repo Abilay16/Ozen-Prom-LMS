@@ -1,5 +1,4 @@
 from uuid import UUID
-from typing import Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 import io

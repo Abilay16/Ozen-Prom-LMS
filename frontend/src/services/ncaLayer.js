@@ -1,4 +1,4 @@
-﻿/**
+/**
  * NCALayer WebSocket client.
  * NCALayer 1.4: wss://127.0.0.1:13579 + legacy "createCMSSignatureFromBase64" API
  */

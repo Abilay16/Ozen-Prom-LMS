@@ -35,14 +35,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
 from app.models.organization import Organization
-from app.models.protocol import Protocol, ProtocolParticipant
+from app.models.protocol import Protocol
 from app.models.certificate import Certificate
-from app.models.training_type import TrainingType
 
 
 async def main(protocol_number: str, org_name: str, dry_run: bool, force: bool):
@@ -73,7 +72,7 @@ async def main(protocol_number: str, org_name: str, dry_run: bool, force: bool):
             current_org = p.organization_id
             print(f'  - {p.id}  [{tt_name}]  exam_date={p.exam_date}  organization_id={current_org}  participants={len(p.participants)}')
             if current_org and not force:
-                print(f'    -> SKIPPING (already has an organization; pass --force to override)')
+                print('    -> SKIPPING (already has an organization; pass --force to override)')
                 continue
             total_participants += len(p.participants)
 

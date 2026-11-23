@@ -1,7 +1,7 @@
 import uuid
 from uuid import UUID
 from typing import Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Query
@@ -10,9 +10,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, org_scope_id, DB
 from app.models.certificate import Certificate
-from app.models.training_type import TrainingType
 from app.models.user import User
-from app.models.protocol import Protocol, ProtocolCommissionMember, ProtocolParticipant
+from app.models.protocol import Protocol, ProtocolParticipant
 from app.models.user_document import UserDocument
 from app.core.exceptions import NotFoundError
 

@@ -35,13 +35,11 @@ What it does NOT do, and why — be upfront about this rather than pretend:
 """
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
 
-from asn1crypto import cms as asn1_cms, pem as asn1_pem, x509 as asn1_x509
+from asn1crypto import cms as asn1_cms, pem as asn1_pem
 from cryptography import x509 as crypto_x509
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 _CERTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "certs")
@@ -153,7 +151,6 @@ def verify_cms(cms_b64_or_der, payload: bytes) -> VerifyResult:
     signer_info = signer_infos[0]
 
     digest_algo = signer_info["digest_algorithm"]["algorithm"].native
-    sig_algo_oid = signer_info["signature_algorithm"]["algorithm"].dotted
     is_pss = "rsassa-pss" in (signer_info["signature_algorithm"]["algorithm"].native or "")
     signature = signer_info["signature"].native
 

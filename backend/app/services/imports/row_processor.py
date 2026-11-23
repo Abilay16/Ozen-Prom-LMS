@@ -21,7 +21,6 @@ from app.models.batch import TrainingBatch
 from app.models.import_row import ImportRow, ImportRowStatus
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.discipline import Discipline
-from app.models.course import Course
 from app.models.organization import Organization
 from app.models.user import User
 from app.services.imports.parser import ImportParserService

@@ -1,6 +1,5 @@
 from uuid import UUID
 from typing import Optional
-from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
 from sqlalchemy import select
 
@@ -90,7 +89,7 @@ async def update_material(material_id: UUID, data: dict, db: DB, admin: CurrentA
     result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
     mat = result.scalar_one_or_none()
     if not mat:
-        raise NotFoundError("Material not found")
+        raise NotFoundError("Материал не найден")
     allowed = {"title", "url", "sort_order"}
     for k, v in data.items():
         if k in allowed:
@@ -103,5 +102,5 @@ async def delete_material(material_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
     mat = result.scalar_one_or_none()
     if not mat:
-        raise NotFoundError("Material not found")
+        raise NotFoundError("Материал не найден")
     await db.delete(mat)

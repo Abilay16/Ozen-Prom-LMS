@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Optional, List
+from typing import List
 from pydantic import BaseModel
 from fastapi import APIRouter
 from sqlalchemy import select
@@ -44,7 +44,7 @@ async def update_test(test_id: UUID, data: dict, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(Test).where(Test.id == test_id))
     test = result.scalar_one_or_none()
     if not test:
-        raise NotFoundError("Test not found")
+        raise NotFoundError("Тест не найден")
     allowed = {"pass_score", "max_attempts", "time_limit_minutes", "show_correct_answers"}
     for k, v in data.items():
         if k in allowed:
@@ -57,7 +57,7 @@ async def add_question(test_id: UUID, body: QuestionIn, db: DB, admin: CurrentAd
     result = await db.execute(select(Test).where(Test.id == test_id))
     test = result.scalar_one_or_none()
     if not test:
-        raise NotFoundError("Test not found")
+        raise NotFoundError("Тест не найден")
 
     question = TestQuestion(test_id=test_id, text=body.text, sort_order=body.sort_order)
     db.add(question)
@@ -76,7 +76,7 @@ async def update_question(question_id: UUID, data: dict, db: DB, admin: CurrentA
     result = await db.execute(select(TestQuestion).where(TestQuestion.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
-        raise NotFoundError("Question not found")
+        raise NotFoundError("Вопрос не найден")
     if "text" in data:
         q.text = data["text"]
     if "sort_order" in data:
@@ -92,7 +92,7 @@ async def replace_question(question_id: UUID, body: QuestionIn, db: DB, admin: C
     result = await db.execute(select(TestQuestion).where(TestQuestion.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
-        raise NotFoundError("Question not found")
+        raise NotFoundError("Вопрос не найден")
 
     q.text = body.text
     q.sort_order = body.sort_order
@@ -118,5 +118,5 @@ async def delete_question(question_id: UUID, db: DB, admin: CurrentAdmin):
     result = await db.execute(select(TestQuestion).where(TestQuestion.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
-        raise NotFoundError("Question not found")
+        raise NotFoundError("Вопрос не найден")
     await db.delete(q)

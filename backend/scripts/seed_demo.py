@@ -28,8 +28,8 @@ import asyncio
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from datetime import date, datetime, timezone
-from sqlalchemy import select, text
+from datetime import date
+from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.core.security import hash_password
 from app.models.user import AdminUser, User

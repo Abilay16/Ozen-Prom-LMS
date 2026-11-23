@@ -6,15 +6,12 @@ certificates must be auto-created for all participants whose result = passed.
 Participants with result = failed or result = None get no certificate.
 A second signing attempt (idempotent re-run) must NOT create duplicate certs.
 """
-import pytest
-from datetime import datetime, timezone
-from app.models.assignment import AssignmentStatus
 from app.models.protocol import ParticipantResult, CommissionRole, ProtocolStatus
 from tests.conftest import (
-    make_admin, make_training_type, make_batch_with_users, make_protocol,
+    make_admin, make_training_type, make_protocol,
     make_commission_member, make_fresh_cms_b64,
 )
-from app.models.protocol import ProtocolParticipant, ProtocolCommissionMember
+from app.models.protocol import ProtocolParticipant
 from uuid import uuid4
 
 

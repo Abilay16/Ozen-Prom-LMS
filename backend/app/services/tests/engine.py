@@ -10,7 +10,6 @@ from sqlalchemy.orm import selectinload
 
 from app.models.attempt import TestAttempt, TestAttemptAnswer, AttemptStatus
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
-from app.models.test import TestQuestionOption
 
 
 class TestEngineService:

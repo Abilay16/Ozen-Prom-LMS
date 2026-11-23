@@ -22,7 +22,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import text, delete
+from sqlalchemy import delete
 from app.core.database import AsyncSessionLocal
 from app.models.user import AdminUser, User
 from app.models.organization import Organization

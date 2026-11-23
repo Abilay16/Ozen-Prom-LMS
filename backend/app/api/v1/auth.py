@@ -81,14 +81,14 @@ async def login(body: LoginRequest, db: DB):
             full_name=user_full_name,
         )
 
-    raise UnauthorizedError("Invalid login or password")
+    raise UnauthorizedError("Неверный логин или пароль")
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(body: RefreshRequest, db: DB):
     payload = decode_token(body.refresh_token)
     if not payload or payload.get("type") != "refresh":
-        raise UnauthorizedError("Invalid refresh token")
+        raise UnauthorizedError("Сессия истекла, войдите заново")
 
     user_id = payload.get("sub")
 
@@ -128,7 +128,7 @@ async def refresh_token(body: RefreshRequest, db: DB):
             full_name=user.full_name,
         )
 
-    raise UnauthorizedError("User not found or inactive")
+    raise UnauthorizedError("Пользователь не найден или отключён")
 
 
 @router.post("/logout")

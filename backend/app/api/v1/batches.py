@@ -36,8 +36,6 @@ async def list_batches(db: DB, admin: CurrentAdmin):  # all admins can read
 
     disc_map: dict = {}
     if all_disc_ids:
-        from sqlalchemy import cast
-        from sqlalchemy.dialects.postgresql import UUID as PG_UUID
         disc_result = await db.execute(
             select(Discipline).where(Discipline.id.in_(list(all_disc_ids)))
         )
@@ -75,16 +73,15 @@ async def create_batch(body: BatchCreate, db: DB, admin: CurrentSuperAdmin):
 @router.get("/{batch_id}")
 async def get_batch(batch_id: UUID, db: DB, admin: CurrentAdmin):  # all admins can read
     from app.models.import_row import ImportRow
-    from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(TrainingBatch).where(TrainingBatch.id == batch_id)
     )
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
     org_id = org_scope_id(admin)
     if org_id and batch.organization_id != org_id:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
     # Count import rows
     rows_result = await db.execute(
         select(ImportRow).where(ImportRow.batch_id == batch_id)
@@ -125,7 +122,7 @@ async def delete_batch(batch_id: UUID, db: DB, admin: CurrentSuperAdmin, deactiv
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
     if deactivate_users:
         users_result = await db.execute(select(User).where(User.batch_id == batch_id))
         for u in users_result.scalars().all():
@@ -141,7 +138,7 @@ async def upload_excel(batch_id: UUID, db: DB, admin: CurrentSuperAdmin, file: U
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
 
     upload_dir = os.path.join(settings.STORAGE_LOCAL_PATH, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
@@ -163,9 +160,9 @@ async def preview_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
     if not batch.excel_file_path:
-        raise NotFoundError("No Excel file uploaded for this batch")
+        raise NotFoundError("Для потока не загружен Excel-файл")
 
     service = ImportParserService()
     preview = service.parse_preview(batch.excel_file_path)
@@ -180,7 +177,7 @@ async def confirm_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
 
     processor = ImportRowProcessor(db)
     summary = await processor.process_batch(batch)
@@ -204,12 +201,11 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
     from app.models.organization import Organization
     from app.models.user import User
     from app.models.assignment import UserCourseAssignment, AssignmentStatus
-    from app.models.course import Course
 
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
     batch = result.scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
 
     full_name = body.full_name.strip()
     position_raw = body.position.strip()
@@ -296,10 +292,10 @@ async def rematch_user_courses(batch_id: UUID, user_id: UUID, db: DB, admin: Cur
 
     batch = (await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))).scalar_one_or_none()
     if not batch:
-        raise NotFoundError("Batch not found")
+        raise NotFoundError("Поток не найден")
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
-        raise NotFoundError("User not found")
+        raise NotFoundError("Пользователь не найден")
 
     norm_position = normalize_position(user.position_raw or "")
 

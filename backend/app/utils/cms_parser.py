@@ -11,7 +11,7 @@ import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from asn1crypto import cms as asn1_cms, pem as asn1_pem, core as asn1_core
+from asn1crypto import cms as asn1_cms, pem as asn1_pem
 
 
 class CMSParseError(ValueError):
@@ -37,7 +37,7 @@ def parse_cms(cms_b64: str) -> CertInfo:
     try:
         raw = base64.b64decode(cms_b64)
     except Exception as exc:
-        raise CMSParseError(f"Invalid Base64: {exc}") from exc
+        raise CMSParseError(f"Подпись повреждена (неверный Base64): {exc}") from exc
 
     try:
         # Unwrap PEM if wrapped
@@ -51,7 +51,7 @@ def parse_cms(cms_b64: str) -> CertInfo:
         # Prefer certificates embedded in the SignedData (NCALayer always includes them)
         certs = payload["certificates"]
         if not certs or len(certs) == 0:
-            raise CMSParseError("No certificates found in CMS")
+            raise CMSParseError("В подписи нет сертификата")
 
         # Take the first certificate (the signer's cert)
         cert = certs[0].chosen
@@ -78,7 +78,7 @@ def parse_cms(cms_b64: str) -> CertInfo:
     except CMSParseError:
         raise
     except Exception as exc:
-        raise CMSParseError(f"CMS parse error: {exc}") from exc
+        raise CMSParseError(f"Не удалось разобрать подпись: {exc}") from exc
 
     return CertInfo(
         serial=serial_hex,

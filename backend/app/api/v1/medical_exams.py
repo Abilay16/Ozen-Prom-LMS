@@ -9,7 +9,6 @@ Admin routes (mounted at /admin/medical-exams):
 Learner routes (mounted at /learner/medical-exams):
   GET  /                — view own medical exam records
 """
-import os
 import uuid
 import io
 from typing import Optional
@@ -18,12 +17,9 @@ from datetime import datetime, date
 from pydantic import BaseModel
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, CurrentLearner, DB
-from app.core.config import settings
 from app.models.medical_exam import MedicalExam
-from app.models.organization import Organization
 from app.models.user import User
 
 router = APIRouter()          # /admin/medical-exams
@@ -73,7 +69,6 @@ def _parse_med_excel(content: bytes, filename: str) -> list[dict]:
     Falls back to column-position heuristic if headers aren't found.
     """
     import openpyxl
-    from openpyxl.utils import get_column_letter
 
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
@@ -139,7 +134,7 @@ def _parse_med_excel(content: bytes, filename: str) -> list[dict]:
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue  # skip empty rows
 
-        def get(field: str):
+        def get(field: str, row=row):
             idx = col_map.get(field)
             if idx is None or idx >= len(row):
                 return None

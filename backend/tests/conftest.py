@@ -4,7 +4,7 @@ Shared fixtures for all tests.
 Test DB: ozen_lms_test (separate from production, created automatically).
 Each test gets a clean slate via table truncation (autouse fixture).
 """
-import pytest
+import os
 import pytest_asyncio
 from uuid import uuid4
 from datetime import date
@@ -48,12 +48,18 @@ from app.models.discipline import Discipline
 from app.models.course import Course
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.protocol import (
-    Protocol, ProtocolCommissionMember, ProtocolParticipant,
-    ProtocolStatus, CommissionRole, ParticipantResult,
+    Protocol, ProtocolCommissionMember, CommissionRole,
 )
 
-TEST_DB_URL    = "postgresql+asyncpg://ozen_user:dev_pass_123@db:5432/ozen_lms_test"
-ADMIN_CONN_URL = "postgresql+asyncpg://ozen_user:dev_pass_123@db:5432/postgres"
+# По умолчанию — Postgres из docker-compose (хост `db`); в CI переопределяется
+# через TEST_DB_HOST / TEST_DB_USER / TEST_DB_PASSWORD.
+_PG = "postgresql+asyncpg://{u}:{p}@{h}:5432/{{db}}".format(
+    u=os.getenv("TEST_DB_USER", "ozen_user"),
+    p=os.getenv("TEST_DB_PASSWORD", "dev_pass_123"),
+    h=os.getenv("TEST_DB_HOST", "db"),
+)
+TEST_DB_URL    = _PG.format(db="ozen_lms_test")
+ADMIN_CONN_URL = _PG.format(db="postgres")
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

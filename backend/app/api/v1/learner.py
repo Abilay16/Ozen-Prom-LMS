@@ -1,5 +1,4 @@
 from uuid import UUID
-from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -10,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentLearner, DB
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
-from app.models.attempt import TestAttempt, TestAttemptAnswer, AttemptStatus
+from app.models.attempt import TestAttempt, AttemptStatus
 from app.models.course import Course
 from app.models.material import CourseMaterial
 from app.models.test import Test, TestQuestion
@@ -86,7 +85,7 @@ async def get_course_detail(assignment_id: UUID, db: DB, learner: CurrentLearner
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise NotFoundError("Assignment not found")
+        raise NotFoundError("Назначение не найдено")
     return assignment
 
 
@@ -102,13 +101,13 @@ async def start_test(assignment_id: UUID, db: DB, learner: CurrentLearner):
     )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise NotFoundError("Assignment not found")
+        raise NotFoundError("Назначение не найдено")
     if assignment.status == AssignmentStatus.passed:
-        raise ForbiddenError("Course already passed")
+        raise ForbiddenError("Курс уже пройден")
 
     test = assignment.course.test
     if not test:
-        raise NotFoundError("No test for this course")
+        raise NotFoundError("Для этого курса нет теста")
 
     # Count attempts
     att_result = await db.execute(
@@ -119,7 +118,7 @@ async def start_test(assignment_id: UUID, db: DB, learner: CurrentLearner):
     )
     attempts = att_result.scalars().all()
     if test.max_attempts > 0 and len(attempts) >= test.max_attempts:
-        raise ForbiddenError("Maximum attempts reached")
+        raise ForbiddenError("Попытки исчерпаны")
 
     attempt = TestAttempt(
         user_id=learner.id,
@@ -169,9 +168,9 @@ async def submit_test(attempt_id: UUID, body: SubmitAnswers, db: DB, learner: Cu
     )
     attempt = result.scalar_one_or_none()
     if not attempt:
-        raise NotFoundError("Attempt not found")
+        raise NotFoundError("Попытка не найдена")
     if attempt.status != AttemptStatus.in_progress:
-        raise ForbiddenError("Attempt already submitted")
+        raise ForbiddenError("Тест уже отправлен")
 
     engine = TestEngineService(db)
     result_data = await engine.calculate_result(attempt, body.answers)
@@ -186,7 +185,7 @@ async def get_result(attempt_id: UUID, db: DB, learner: CurrentLearner):
     )
     attempt = result.scalar_one_or_none()
     if not attempt:
-        raise NotFoundError("Attempt not found")
+        raise NotFoundError("Попытка не найдена")
     return {
         "attempt_id": str(attempt.id),
         "score": attempt.score,
@@ -222,10 +221,10 @@ async def view_material(request: Request, material_id: UUID, db: DB, token: Opti
     result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
-        raise NotFoundError("Material not found")
+        raise NotFoundError("Материал не найден")
     await _assert_material_assigned(db, UUID(payload["sub"]), material.course_id)
     if not os.path.exists(material.file_path):
-        raise NotFoundError("File not found on disk")
+        raise NotFoundError("Файл не найден на сервере")
 
     ext = os.path.splitext(material.file_path)[1].lower()
     serve_path = material.file_path
@@ -262,10 +261,10 @@ async def download_material(material_id: UUID, db: DB, learner: CurrentLearner):
     result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
-        raise NotFoundError("Material not found")
+        raise NotFoundError("Материал не найден")
     await _assert_material_assigned(db, learner.id, material.course_id)
     if not os.path.exists(material.file_path):
-        raise NotFoundError("File not found on disk")
+        raise NotFoundError("Файл не найден на сервере")
     return FileResponse(
         material.file_path,
         filename=os.path.basename(material.file_path),
@@ -290,10 +289,10 @@ async def stream_material(material_id: UUID, token: str, db: DB):
     result = await db.execute(select(CourseMaterial).where(CourseMaterial.id == material_id))
     material = result.scalar_one_or_none()
     if not material or not material.file_path:
-        raise NotFoundError("Material not found")
+        raise NotFoundError("Материал не найден")
     await _assert_material_assigned(db, UUID(payload["sub"]), material.course_id)
     if not os.path.exists(material.file_path):
-        raise NotFoundError("File not found on disk")
+        raise NotFoundError("Файл не найден на сервере")
 
     filename = os.path.basename(material.file_path)
     media_type, _ = mimetypes.guess_type(filename)

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <!-- Android: width only (parent content-area is the scroll container for multipage) -->
   <!-- iOS: height:100% (internal flex layout with its own scroll) -->
   <!-- Desktop: height:100% (iframe fills) -->

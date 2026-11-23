@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models.protocol import Protocol, ProtocolCommissionMember, CommissionRole
 

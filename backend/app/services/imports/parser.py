@@ -4,7 +4,6 @@ Reads an Excel file, detects columns by fuzzy header matching,
 and returns a preview of rows with status.
 """
 import re
-from typing import Any
 import pandas as pd
 
 

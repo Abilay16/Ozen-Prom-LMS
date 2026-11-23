@@ -1,0 +1,16 @@
+target-version = "py311"
+line-length = 120
+extend-exclude = ["alembic/versions/_archived_pre_squash"]
+
+[lint]
+# E9 — синтаксис, F — pyflakes (неиспользуемое/неопределённое), B — типичные баги.
+select = ["E9", "F", "B"]
+ignore = [
+  "B008",  # Query()/File()/Depends() в дефолтах — штатный приём FastAPI
+  "B904",  # raise ... from err внутри except — стиль, не баг
+  "B905",  # zip(strict=) — сознательно не требуем
+]
+
+[lint.per-file-ignores]
+# Строковые аннотации связей SQLAlchemy ссылаются на модели из других модулей.
+"app/models/*.py" = ["F821"]
