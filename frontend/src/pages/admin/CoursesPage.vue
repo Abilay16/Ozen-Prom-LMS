@@ -40,6 +40,13 @@
           <input v-model="form.target_positions" class="input-field mt-1" placeholder="водитель, слесарь, электрик (через запятую)" />
           <p class="text-xs text-gray-400 mt-1">Если поставить пустым — курс достанется всем, кому не подошёл другой курс</p>
         </div>
+        <label v-if="editing" class="flex items-start gap-2 cursor-pointer">
+          <input v-model="form.is_active" type="checkbox" class="mt-0.5" />
+          <span class="text-sm text-gray-700">
+            Активен
+            <span class="block text-xs text-gray-400">Отключённый курс больше не назначается новым сотрудникам; история обучения сохраняется.</span>
+          </span>
+        </label>
       </div>
       <template #footer>
         <button @click="save" :disabled="saving" class="btn-primary">{{ editing ? 'Сохранить' : 'Создать' }}</button>
@@ -70,8 +77,9 @@
         </thead>
         <tbody>
           <tr v-for="c in filteredCourses" :key="c.id" class="border-b hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium">
+            <td class="px-4 py-3 font-medium" :class="{ 'text-gray-400': c.is_active === false }">
               {{ c.name }}
+              <span v-if="c.is_active === false" class="ml-1 text-xs font-normal px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">отключён</span>
               <div v-if="c.target_positions" class="text-xs text-blue-500 mt-0.5">Должн.: {{ c.target_positions }}</div>
             </td>
             <td class="px-4 py-3">{{ c.discipline?.name }}</td>
@@ -139,7 +147,7 @@ function openCreate() {
 
 function openEdit(c) {
   editing.value = c
-  form.value = { discipline_id: c.discipline_id, name: c.name, description: c.description || '', duration_hours: c.duration_hours, target_positions: c.target_positions || '' }
+  form.value = { discipline_id: c.discipline_id, name: c.name, description: c.description || '', duration_hours: c.duration_hours, target_positions: c.target_positions || '', is_active: c.is_active !== false }
   modal.value = true
 }
 
@@ -162,9 +170,15 @@ async function save() {
 }
 
 async function deleteCourse(c) {
-  const ok = await confirm({ message: `Удалить курс «${c.name}»? Это также удалит все назначения этого курса.`, danger: true, confirmText: 'Удалить' })
+  const ok = await confirm({ message: `Удалить курс «${c.name}» вместе с материалами и тестом?`, danger: true, confirmText: 'Удалить' })
   if (!ok) return
-  await api.delete(`/admin/courses/${c.id}`)
+  try {
+    await api.delete(`/admin/courses/${c.id}`)
+  } catch (e) {
+    // Например, курс уже назначен сотрудникам — сервер объясняет, что делать.
+    toast.error(apiErrorMessage(e), 9000)
+    return
+  }
   await load()
   toast.success('Курс удалён')
 }

@@ -57,7 +57,29 @@ async def delete_course(course_id: UUID, db: DB, admin: CurrentAdmin):
     course = result.scalar_one_or_none()
     if not course:
         raise NotFoundError("Курс не найден")
+    from sqlalchemy import func
+    from app.core.exceptions import ConflictError
+    from app.models.assignment import UserCourseAssignment
+    from app.models.material import CourseMaterial
+    from app.api.v1.materials import _remove_material_files
+
+    # Назначения ссылаются на курс без каскада — раньше удаление падало 500.
+    # Историю обучения сотрудников не удаляем: предлагаем отключить курс.
+    assigned = (await db.execute(
+        select(func.count()).select_from(UserCourseAssignment).where(UserCourseAssignment.course_id == course_id)
+    )).scalar_one()
+    if assigned:
+        raise ConflictError(
+            f"Курс назначен сотрудникам ({assigned}) — удалить его нельзя, это сотрёт историю обучения. "
+            "Снимите галочку «Активен», чтобы курс больше не назначался."
+        )
+    file_paths = (await db.execute(
+        select(CourseMaterial.file_path).where(CourseMaterial.course_id == course_id)
+    )).scalars().all()
     await db.delete(course)
+    await db.flush()
+    for path in file_paths:
+        _remove_material_files(path)
 
 
 @router.get("/{course_id}/materials")

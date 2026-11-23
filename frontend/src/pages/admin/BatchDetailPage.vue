@@ -339,7 +339,13 @@ async function uploadFile() {
     fd.append('file', selectedFile.value)
     await api.post(`/admin/batches/${batchId}/upload-excel`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     const { data } = await api.post(`/admin/batches/${batchId}/preview-import`)
-    preview.value = data
+    if (data.parse_error) {
+      // Например, не найдена колонка ФИО — объясняем, а не показываем пустой предпросмотр.
+      uploadError.value = data.parse_error
+      preview.value = null
+    } else {
+      preview.value = data
+    }
   } catch (err) {
     uploadError.value = err.response?.data?.detail || 'Ошибка загрузки файла'
   }

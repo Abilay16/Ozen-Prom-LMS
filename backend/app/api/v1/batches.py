@@ -1,13 +1,13 @@
 from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, CurrentSuperAdmin, org_scope_id, DB
 from app.models.batch import TrainingBatch, BatchStatus
 from app.models.discipline import Discipline
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 
 router = APIRouter()
 
@@ -176,15 +176,23 @@ async def confirm_import(batch_id: UUID, db: DB, admin: CurrentSuperAdmin):
     """Confirm import: create users, assign courses."""
     from app.services.imports.row_processor import ImportRowProcessor
 
-    result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
+    # Блокировка + проверка статуса: повторное подтверждение (двойной клик,
+    # повтор после обрыва сети) раньше прогоняло файл заново — все строки
+    # становились «дубликатами», и логины/пароли больше не показывались.
+    result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id).with_for_update())
     batch = result.scalar_one_or_none()
     if not batch:
         raise NotFoundError("Поток не найден")
+    if not batch.excel_file_path:
+        raise NotFoundError("Для потока не загружен Excel-файл")
+    if batch.status != BatchStatus.processing:
+        raise ConflictError("Этот файл уже импортирован. Чтобы добавить сотрудников, загрузите новый файл.")
 
     processor = ImportRowProcessor(db)
     summary = await processor.process_batch(batch)
-    if "error" not in summary:
-        batch.status = BatchStatus.completed
+    if "error" in summary:
+        raise HTTPException(status_code=422, detail=summary["error"])
+    batch.status = BatchStatus.completed
     return summary
 
 
@@ -200,8 +208,7 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
     from fastapi import HTTPException
     from app.services.users.factory import UserFactoryService
     from app.services.positions.normalizer import normalize_position, find_course_for_position
-    from app.models.organization import Organization
-    from app.models.user import User
+    from app.services.users.matching import find_existing_user, get_or_create_org
     from app.models.assignment import UserCourseAssignment, AssignmentStatus
 
     result = await db.execute(select(TrainingBatch).where(TrainingBatch.id == batch_id))
@@ -209,35 +216,20 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
     if not batch:
         raise NotFoundError("Поток не найден")
 
-    full_name = body.full_name.strip()
+    full_name = " ".join(body.full_name.split())
     position_raw = body.position.strip()
     org_name = body.organization.strip()
 
     if not full_name:
         raise HTTPException(status_code=422, detail="ФИО не может быть пустым")
 
-    # Get or create organization
-    org = None
-    if org_name:
-        res = await db.execute(select(Organization))
-        for o in res.scalars().all():
-            if o.name.strip().lower() == org_name.lower():
-                org = o
-                break
-        if not org:
-            org = Organization(name=org_name, is_active=True)
-            db.add(org)
-            await db.flush()
-    org_id = org.id if org else None
+    org = await get_or_create_org(db, org_name)
+    org_id = org.id if org else batch.organization_id
 
     norm_name = UserFactoryService.normalize_full_name(full_name)
     norm_position = normalize_position(position_raw)
 
-    # Duplicate check
-    dup_q = select(User).where(User.normalized_full_name == norm_name)
-    if org_id:
-        dup_q = dup_q.where(User.organization_id == org_id)
-    existing = (await db.execute(dup_q.limit(1))).scalar_one_or_none()
+    existing = await find_existing_user(db, norm_name, org_id)
     if existing:
         raise HTTPException(status_code=409, detail=f"Пользователь «{full_name}» уже существует в этой организации")
 
@@ -249,6 +241,9 @@ async def add_user_manually(batch_id: UUID, body: ManualUserAdd, db: DB, admin: 
         position_raw=position_raw,
         batch_id=batch.id,
     )
+    # Как и при импорте из Excel: пароль виден админу в списке пользователей
+    # (раньше у добавленных вручную там было «не задан»).
+    user.plain_password = plain_password
 
     # Assign courses for each discipline in the batch
     batch_disciplines: list[Discipline] = []

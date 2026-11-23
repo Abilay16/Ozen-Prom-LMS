@@ -21,27 +21,15 @@ from app.models.batch import TrainingBatch
 from app.models.import_row import ImportRow, ImportRowStatus
 from app.models.assignment import UserCourseAssignment, AssignmentStatus
 from app.models.discipline import Discipline
-from app.models.organization import Organization
-from app.models.user import User
 from app.services.imports.parser import ImportParserService
 from app.services.users.factory import UserFactoryService
+from app.services.users.matching import find_existing_user, get_or_create_org
 from app.services.positions.normalizer import normalize_position, find_course_for_position
 
 
 class ImportRowProcessor:
     def __init__(self, db: AsyncSession):
         self.db = db
-
-    async def _get_or_create_org(self, name: str):
-        norm = name.strip().lower()
-        result = await self.db.execute(select(Organization))
-        for org in result.scalars().all():
-            if org.name.strip().lower() == norm:
-                return org
-        org = Organization(name=name.strip(), is_active=True)
-        self.db.add(org)
-        await self.db.flush()
-        return org
 
     async def _find_course_for_position(self, discipline_id: UUID, norm_position: str):
         return await find_course_for_position(self.db, discipline_id, norm_position)
@@ -80,13 +68,11 @@ class ImportRowProcessor:
             norm_name = UserFactoryService.normalize_full_name(full_name)
             norm_position = normalize_position(position_raw)
 
-            org = await self._get_or_create_org(org_name) if org_name else None
-            org_id = org.id if org else None
+            # Организация строки, а если её нет — организация самого потока.
+            org = await get_or_create_org(self.db, org_name)
+            org_id = org.id if org else batch.organization_id
 
-            dup_q = select(User).where(User.normalized_full_name == norm_name)
-            if org_id:
-                dup_q = dup_q.where(User.organization_id == org_id)
-            existing = (await self.db.execute(dup_q.limit(1))).scalar_one_or_none()
+            existing = await find_existing_user(self.db, norm_name, org_id)
 
             if existing:
                 self.db.add(ImportRow(

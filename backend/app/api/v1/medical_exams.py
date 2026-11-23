@@ -202,14 +202,39 @@ async def import_med_exams(
     if not records:
         raise HTTPException(400, "В файле не найдено строк с данными. Проверьте формат Excel.")
 
-    # Try to match full_name → user_id
-    all_users = (await db.execute(select(User))).scalars().all()
-    name_to_user: dict[str, User] = {u.full_name.lower().strip(): u for u in all_users}
+    # Сопоставление ФИО → пользователь. Привязываем автоматически только
+    # однозначное совпадение (с учётом организации, если она выбрана).
+    # Раньше при однофамильцах запись о годности уходила случайному из них —
+    # в его кабинет и на его публичную карточку по QR.
+    def norm(name: str) -> str:
+        return " ".join((name or "").lower().replace("ё", "е").split())
+
+    users_q = select(User)
+    if organization_id:
+        users_q = users_q.where(User.organization_id == organization_id)
+    candidates: dict[str, list[User]] = {}
+    for u in (await db.execute(users_q)).scalars().all():
+        candidates.setdefault(norm(u.full_name), []).append(u)
+
+    # Повторная загрузка того же файла не должна дублировать записи.
+    existing_keys = {
+        (norm(fn), ed, bd)
+        for fn, ed, bd in (await db.execute(
+            select(MedicalExam.full_name, MedicalExam.exam_date, MedicalExam.birth_date)
+        )).all()
+    }
 
     saved = 0
+    skipped_duplicates = 0
     unmatched_pairs: list[tuple[MedicalExam, dict]] = []
     for rec in records:
-        matched_user = name_to_user.get(rec["full_name"].lower().strip())
+        key = (norm(rec["full_name"]), rec.get("exam_date"), rec.get("birth_date"))
+        if key in existing_keys:
+            skipped_duplicates += 1
+            continue
+        existing_keys.add(key)
+        matches = candidates.get(key[0], [])
+        matched_user = matches[0] if len(matches) == 1 else None
         exam = MedicalExam(
             user_id=matched_user.id if matched_user else None,
             organization_id=organization_id,
@@ -220,9 +245,9 @@ async def import_med_exams(
             unmatched_pairs.append((exam, rec))
         saved += 1
 
-    await db.commit()
-
-    # id is Python-generated (uuid.uuid4) so it's available immediately
+    # Ответ собираем после flush (id уже назначены), но до commit — после
+    # commit атрибуты могут быть сброшены, и обращение к ним падает.
+    await db.flush()
     unmatched_out = [
         {
             "id": str(exam.id),
@@ -232,8 +257,14 @@ async def import_med_exams(
         }
         for exam, rec in unmatched_pairs
     ]
+    await db.commit()
 
-    return {"imported": saved, "total_parsed": len(records), "unmatched": unmatched_out}
+    return {
+        "imported": saved,
+        "total_parsed": len(records),
+        "skipped_duplicates": skipped_duplicates,
+        "unmatched": unmatched_out,
+    }
 
 
 # ── Admin: Assign user ────────────────────────────────────────────────────────

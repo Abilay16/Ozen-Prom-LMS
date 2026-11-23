@@ -277,12 +277,13 @@ async function doImport() {
     const res = await api.post('/admin/medical-exams/import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
-    const { imported, unmatched } = res.data
+    const { imported, unmatched, skipped_duplicates: skipped } = res.data
     const unmatchedCount = unmatched?.length ?? 0
     importResult.value = {
       ok: true,
       message: `Импортировано: ${imported} записей` +
-        (unmatchedCount > 0 ? ` (автоматически не привязано: ${unmatchedCount})` : ' — все привязаны')
+        (unmatchedCount > 0 ? ` (автоматически не привязано: ${unmatchedCount})` : ' — все привязаны') +
+        (skipped ? `. Уже были загружены ранее и пропущены: ${skipped}` : '')
     }
     unmatchedItems.value = unmatched ?? []
     if (importFileInput.value) importFileInput.value.value = ''

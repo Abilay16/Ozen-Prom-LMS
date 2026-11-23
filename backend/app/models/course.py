@@ -25,7 +25,10 @@ class Course(Base):
 
     # Relationships
     discipline: Mapped["Discipline"] = relationship("Discipline", back_populates="courses")  # noqa
-    materials: Mapped[list["CourseMaterial"]] = relationship("CourseMaterial", back_populates="course")  # noqa
-    test: Mapped["Test"] = relationship("Test", back_populates="course", uselist=False)  # noqa
+    # passive_deletes: материалы/тест/правила удаляет каскад в БД (ON DELETE
+    # CASCADE). Без этого ORM пытался обнулить их course_id (NOT NULL) —
+    # удаление любого курса с материалами падало 500.
+    materials: Mapped[list["CourseMaterial"]] = relationship("CourseMaterial", back_populates="course", passive_deletes=True)  # noqa
+    test: Mapped["Test"] = relationship("Test", back_populates="course", uselist=False, passive_deletes=True)  # noqa
     assignments: Mapped[list["UserCourseAssignment"]] = relationship("UserCourseAssignment", back_populates="course")  # noqa
-    rules: Mapped[list["PositionCourseRule"]] = relationship("PositionCourseRule", back_populates="course")  # noqa
+    rules: Mapped[list["PositionCourseRule"]] = relationship("PositionCourseRule", back_populates="course", passive_deletes=True)  # noqa
