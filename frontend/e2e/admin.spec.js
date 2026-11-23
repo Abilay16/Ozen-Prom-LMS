@@ -64,3 +64,17 @@ test('просмотр по организации: видит только св
   await expect(page).not.toHaveURL(/\/admin\/protocols\/new/)
   guard.check()
 })
+
+test('прогресс: одна строка на сотрудника, по нажатию — его обучения', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'admin')
+  await page.goto('/admin/progress')
+  const person = page.getByRole('button', { name: /Тестов Тест Тестович/ })
+  await expect(person).toHaveCount(1)
+  await expect(person).toHaveAttribute('aria-expanded', 'false')
+  await person.click()
+  await expect(person).toHaveAttribute('aria-expanded', 'true')
+  // Подробности свёрстаны отдельно для телефона и компьютера — берём видимые.
+  await expect(page.getByText('E2E курс').filter({ visible: true })).toHaveCount(1)
+  guard.check()
+})

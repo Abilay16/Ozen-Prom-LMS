@@ -71,6 +71,129 @@ async def get_stats(db: DB, admin: CurrentViewerAdmin):
     }
 
 
+def _filters(admin, organization_id, batch_id, status, search, date_from, date_to) -> list:
+    """Условия на назначение (UserCourseAssignment) и его сотрудника (User) —
+    общие для списка по курсам и списка по сотрудникам."""
+    from datetime import datetime, timezone
+    conds = []
+    if batch_id:
+        conds.append(UserCourseAssignment.batch_id == batch_id)
+    if status:
+        conds.append(UserCourseAssignment.status == status)
+    org_id = org_scope_id(admin)
+    if org_id:
+        conds.append(User.organization_id == org_id)
+    elif organization_id:
+        conds.append(User.organization_id == organization_id)
+    if search and search.strip():
+        conds.append(User.normalized_full_name.ilike(f"%{search.strip().lower()}%"))
+    if date_from:
+        conds.append(UserCourseAssignment.assigned_at >= date_from)
+    if date_to:
+        conds.append(UserCourseAssignment.assigned_at <= datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc))
+    return conds
+
+
+def _best(a: UserCourseAssignment) -> tuple:
+    completed = [x for x in (a.attempts or []) if x.status == AttemptStatus.completed]
+    if not completed:
+        return None, None
+    best = max(completed, key=lambda x: x.score_percent or 0)
+    return best.score_percent, best.passed
+
+
+def _assignment_out(a: UserCourseAssignment) -> dict:
+    best_score, best_passed = _best(a)
+    return {
+        "id": str(a.id),
+        "status": a.status,
+        "assigned_at": a.assigned_at,
+        "completed_at": a.completed_at,
+        "best_score": best_score,
+        "best_passed": best_passed,
+        "attempts_used": sum(1 for x in (a.attempts or []) if x.status == AttemptStatus.completed),
+        "discipline": {"id": str(a.discipline.id), "name": a.discipline.name} if a.discipline else None,
+        "course": {"id": str(a.course.id), "name": a.course.name} if a.course else None,
+    }
+
+
+def _user_out(u: User) -> dict:
+    return {
+        "id": str(u.id),
+        "full_name": u.full_name,
+        "login": u.login,
+        "position_raw": u.position_raw or "",
+        "organization_name": u.organization.name if u.organization else "",
+    }
+
+
+@router.get("/by-user")
+async def get_progress_by_user(
+    db: DB,
+    admin: CurrentViewerAdmin,
+    organization_id: Optional[UUID] = Query(None),
+    batch_id: Optional[UUID] = Query(None),
+    status: Optional[AssignmentStatus] = Query(None),
+    search: Optional[str] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    response: Response = None,
+    skip: int = 0,
+    limit: int = Query(50),
+):
+    """Прогресс по сотрудникам: одна запись на человека со всеми его
+    обучениями (раньше один человек повторялся строкой на каждый курс).
+    Постранично — по сотрудникам, чтобы обучения одного человека не
+    разъезжались по разным страницам."""
+    conds = _filters(admin, organization_id, batch_id, status, search, date_from, date_to)
+
+    users_q = (
+        select(User.id, User.full_name)
+        .join(UserCourseAssignment, UserCourseAssignment.user_id == User.id)
+        .where(*conds)
+        .group_by(User.id, User.full_name)
+        .order_by(User.full_name, User.id)
+    )
+    rows = await paged(db, users_q, response, skip, limit, scalars=False)
+    user_ids = [r.id for r in rows]
+    if not user_ids:
+        return []
+
+    users = {
+        u.id: u for u in (await db.execute(
+            select(User).options(selectinload(User.organization)).where(User.id.in_(user_ids))
+        )).scalars().all()
+    }
+    assignments = (await db.execute(
+        select(UserCourseAssignment)
+        .join(User, UserCourseAssignment.user_id == User.id)
+        .options(
+            selectinload(UserCourseAssignment.course),
+            selectinload(UserCourseAssignment.discipline),
+            selectinload(UserCourseAssignment.attempts),
+        )
+        .where(UserCourseAssignment.user_id.in_(user_ids), *conds)
+        .order_by(UserCourseAssignment.assigned_at.desc())
+    )).scalars().all()
+
+    by_user: dict = {uid: [] for uid in user_ids}
+    for a in assignments:
+        by_user[a.user_id].append(_assignment_out(a))
+
+    out = []
+    for uid in user_ids:
+        items = by_user[uid]
+        counts = {s.value: 0 for s in AssignmentStatus}
+        for a in items:
+            counts[a["status"].value if hasattr(a["status"], "value") else a["status"]] += 1
+        out.append({
+            "user": _user_out(users[uid]),
+            "assignments": items,
+            "summary": {"total": len(items), **counts},
+        })
+    return out
+
+
 @router.get("")
 async def get_progress(
     db: DB,
@@ -94,53 +217,8 @@ async def get_progress(
             selectinload(UserCourseAssignment.attempts),
         )
         .join(UserCourseAssignment.user)
+        .where(*_filters(admin, organization_id, batch_id, status, search, date_from, date_to))
         .order_by(UserCourseAssignment.assigned_at.desc())
     )
-    if batch_id:
-        q = q.where(UserCourseAssignment.batch_id == batch_id)
-    if status:
-        q = q.where(UserCourseAssignment.status == status)
-    org_id = org_scope_id(admin)
-    if org_id:
-        q = q.where(User.organization_id == org_id)
-    elif organization_id:
-        q = q.where(User.organization_id == organization_id)
-    if search:
-        q = q.where(User.normalized_full_name.ilike(f"%{search.lower()}%"))
-    if date_from:
-        q = q.where(UserCourseAssignment.assigned_at >= date_from)
-    if date_to:
-        from datetime import datetime, timezone
-        dt_to = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
-        q = q.where(UserCourseAssignment.assigned_at <= dt_to)
     assignments = await paged(db, q, response, skip, limit)
-
-    out = []
-    for a in assignments:
-        u = a.user
-        best_score = None
-        best_passed = None
-        if a.attempts:
-            completed = [x for x in a.attempts if x.status == AttemptStatus.completed]
-            if completed:
-                best = max(completed, key=lambda x: x.score_percent or 0)
-                best_score = best.score_percent
-                best_passed = best.passed
-        out.append({
-            "id": str(a.id),
-            "status": a.status,
-            "assigned_at": a.assigned_at,
-            "completed_at": a.completed_at,
-            "best_score": best_score,
-            "best_passed": best_passed,
-            "user": {
-                "id": str(u.id),
-                "full_name": u.full_name,
-                "login": u.login,
-                "position_raw": u.position_raw or "",
-                "organization_name": u.organization.name if u.organization else "",
-            } if u else None,
-            "discipline": {"id": str(a.discipline.id), "name": a.discipline.name} if a.discipline else None,
-            "course": {"id": str(a.course.id), "name": a.course.name} if a.course else None,
-        })
-    return out
+    return [{**_assignment_out(a), "user": _user_out(a.user) if a.user else None} for a in assignments]
