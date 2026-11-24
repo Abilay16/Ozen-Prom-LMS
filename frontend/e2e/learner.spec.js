@@ -42,6 +42,24 @@ test('обучающийся видит свои удостоверения', as
   guard.check()
 })
 
+test('сертификат БиОТ ИТР: штамп ЭЦП и скачивание PDF файлом', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'learner')
+  await page.goto('/my/certificates/00000000-0000-4000-8000-00000000e2e2')
+  await expect(page.locator('.biot-cert .stamp')).toBeVisible()
+  await expect(page.locator('.biot-cert')).toContainText('E2E0SERIAL0001')
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Скачать PDF' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toBe('Сертификат_E2E-BIOT-ITR-1.pdf')
+  const fs = await import('node:fs')
+  const bytes = fs.readFileSync(await file.path())
+  expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
+  expect(bytes.length).toBeGreaterThan(100_000) // картинка листа, а не пустой файл
+  guard.check()
+})
+
 test('обучающемуся закрыта админка', async ({ page }) => {
   await login(page, 'learner')
   await page.goto('/admin/dashboard')

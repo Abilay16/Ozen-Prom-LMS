@@ -9,6 +9,7 @@
                                   (3 вопроса, правильный ответ — «Верно»)
   e2e_other   — сотрудник другой организации (не должен быть виден viewer'у)
   Удостоверение БиОТ E2E-BIOT-0001 (id 00000000-0000-4000-8000-00000000e2e1)
+  Сертификат БиОТ ИТР E2E-BIOT-ITR-1 (id …e2e2) по подписанному протоколу
 
 Usage:
   docker compose exec backend python -m scripts.seed_e2e
@@ -17,7 +18,7 @@ import asyncio
 import os
 import sys
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,11 +33,15 @@ from app.models.certificate import Certificate  # noqa: E402
 from app.models.course import Course  # noqa: E402
 from app.models.discipline import Discipline  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
+from app.models.protocol import (  # noqa: E402
+    CommissionRole, Protocol, ProtocolCommissionMember, ProtocolStatus,
+)
 from app.models.test import Test, TestQuestion, TestQuestionOption  # noqa: E402
 from app.models.training_type import TrainingType  # noqa: E402
 from app.models.user import AdminUser, User  # noqa: E402
 
 CERT_ID = uuid.UUID("00000000-0000-4000-8000-00000000e2e1")
+ITR_CERT_ID = uuid.UUID("00000000-0000-4000-8000-00000000e2e2")
 
 
 async def one(db, stmt):
@@ -148,6 +153,35 @@ async def main():
                 position=user.position_raw,
                 issued_date=today,
                 valid_until=today + timedelta(days=365),
+                is_renewal=False,
+            ))
+
+        # Сертификат БиОТ ИТР (3 года) по подписанному протоколу — для проверки
+        # штампа ЭЦП председателя и скачивания PDF.
+        if not await one(db, select(Certificate).where(Certificate.id == ITR_CERT_ID)):
+            today = date.today()
+            proto = Protocol(protocol_number="E2E-П-1", training_type_id=biot.id if biot else None,
+                             organization_id=org_main.id, exam_date=today, status=ProtocolStatus.signed)
+            db.add(proto)
+            await db.flush()
+            now = datetime.now(timezone.utc)
+            db.add(ProtocolCommissionMember(
+                protocol_id=proto.id, full_name="E2E Председатель", position_title="Председатель комиссии",
+                role=CommissionRole.chair, sort_order=0, signed_at=now,
+                signer_cert_serial="E2E0SERIAL0001", signer_cert_owner="E2E ПРЕДСЕДАТЕЛЬ",
+                signer_cert_valid_from=now - timedelta(days=30), signer_cert_valid_to=now + timedelta(days=335),
+            ))
+            db.add(Certificate(
+                id=ITR_CERT_ID,
+                certificate_number="E2E-BIOT-ITR-1",
+                user_id=user.id,
+                training_type_id=biot.id if biot else None,
+                protocol_id=proto.id,
+                full_name=user.full_name,
+                organization_name=org_main.name,
+                position=user.position_raw,
+                issued_date=today,
+                valid_until=today + timedelta(days=3 * 365),
                 is_renewal=False,
             ))
 

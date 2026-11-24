@@ -29,6 +29,18 @@ test('суперадмин видит удостоверение E2E в спис
   guard.check()
 })
 
+test('суперадмин скачивает сертификат БиОТ ИТР файлом, а не уходит на печать', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'admin')
+  await page.goto('/admin/certificates/00000000-0000-4000-8000-00000000e2e2')
+  await expect(page.locator('.biot-cert .stamp')).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Скачать PDF' }).click()
+  expect((await download).suggestedFilename()).toBe('Сертификат_E2E-BIOT-ITR-1.pdf')
+  await expect(page).toHaveURL(/\/admin\/certificates\//)
+  guard.check()
+})
+
 test('член комиссии попадает на протоколы, без пунктов администрирования', async ({ page }) => {
   const guard = watchErrors(page)
   await login(page, 'chair')
