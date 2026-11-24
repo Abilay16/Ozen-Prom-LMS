@@ -8,7 +8,7 @@
   <div v-else class="print-page">
     <!-- Print / Back bar (hidden when printing) -->
     <div class="no-print flex gap-3 p-4 bg-gray-100 border-b">
-      <button @click="router.push(`/admin/protocols/${route.params.id}`)" class="text-sm text-gray-600 hover:text-gray-800">← Назад к протоколу</button>
+      <button @click="backToProtocol" class="text-sm text-gray-600 hover:text-gray-800">← Назад к протоколу</button>
       <button @click="doPrint()" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700">🖨 Печать</button>
       <button @click="doSavePdf()" class="text-sm bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-700">⬇ Скачать PDF</button>
     </div>
@@ -373,6 +373,15 @@ import api from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
+
+// Пришли со страницы протокола — возвращаемся по истории. Раньше здесь был
+// push: в истории копилось «протокол → печать → протокол», и следующее
+// «Назад» на странице протокола снова открывало печать.
+function backToProtocol() {
+  const detail = `/admin/protocols/${route.params.id}`
+  if (window.history.state?.back === detail) router.back()
+  else router.replace(detail)
+}
 const p = ref(null)
 const loading = ref(true)
 const error = ref('')

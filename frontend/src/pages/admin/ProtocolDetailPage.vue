@@ -5,7 +5,7 @@
   <div v-else>
     <!-- Header -->
     <div class="flex items-center gap-3 mb-6">
-      <button @click="$router.back()" class="text-gray-500 hover:text-gray-700">← Назад</button>
+      <button @click="goBack" class="text-gray-500 hover:text-gray-700">← Назад</button>
       <h1 class="text-2xl font-bold text-gray-800 flex-1">
         {{ isNew ? 'Новый протокол' : `Протокол № ${form.protocol_number}` }}
       </h1>
@@ -355,6 +355,14 @@ const toast = useToast()
 const { confirm } = useConfirm()
 const route = useRoute()
 const router = useRouter()
+
+// «Назад» никогда не ведёт на печать этого же протокола и не уводит с сайта
+// при открытии по прямой ссылке — тогда идём к списку протоколов.
+function goBack() {
+  const prev = window.history.state?.back
+  if (prev && !prev.endsWith('/print')) router.back()
+  else router.push('/admin/protocols')
+}
 const auth = useAuthStore()
 const { canEdit } = useRole()
 

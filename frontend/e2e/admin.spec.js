@@ -41,6 +41,21 @@ test('суперадмин скачивает сертификат БиОТ ИТ
   guard.check()
 })
 
+test('протокол: печать → «Назад к протоколу» → «Назад» ведёт к списку, а не на печать', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'admin')
+  await page.goto('/admin/protocols')
+  await page.getByText('E2E-П-1').first().click()
+  await expect(page).toHaveURL(/\/admin\/protocols\/[0-9a-f-]+$/)
+  await page.getByRole('button', { name: /Печать протокола/ }).click()
+  await expect(page).toHaveURL(/\/print$/)
+  await page.getByRole('button', { name: /Назад к протоколу/ }).click()
+  await expect(page).toHaveURL(/\/admin\/protocols\/[0-9a-f-]+$/)
+  await page.getByRole('button', { name: /^← Назад$/ }).click()
+  await expect(page).toHaveURL(/\/admin\/protocols$/)
+  guard.check()
+})
+
 test('член комиссии попадает на протоколы, без пунктов администрирования', async ({ page }) => {
   const guard = watchErrors(page)
   await login(page, 'chair')
