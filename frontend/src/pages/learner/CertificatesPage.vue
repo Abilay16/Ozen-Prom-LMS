@@ -17,12 +17,35 @@
           <button type="button" class="btn btn--primary" :disabled="!verifyToken" @click="downloadQrPng">
             <Download :size="17" /> Сохранить QR
           </button>
-          <button type="button" class="btn btn--ghost" :disabled="!verifyToken" @click="printPlasticCard">
-            <Printer :size="17" /> Карта 85×54 мм
+          <button type="button" class="btn btn--ghost" :disabled="!verifyToken" @click="openCard">
+            <IdCard :size="17" /> Карта работника
           </button>
         </div>
       </div>
     </section>
+
+    <!-- Карта работника 85,6 × 54 мм: предпросмотр, печать, PDF -->
+    <Modal v-model="cardOpen" title="Карта работника" max-width="max-w-xl">
+      <WorkerCard
+        ref="cardRef"
+        :full-name="meData?.full_name"
+        :position="meData?.position"
+        :photo-url="meData?.photo_url"
+        :qr-data-url="cardQr"
+      />
+      <p class="muted mt-3">
+        Размер 85,6 × 54 мм — как банковская карта.
+        <template v-if="!meData?.photo_url">Фото пока не загружено — его добавляет администратор.</template>
+      </p>
+      <template #footer>
+        <button type="button" class="btn btn--primary flex-1" :disabled="!!cardBusy" @click="cardAction('pdf')">
+          <Download :size="17" /> {{ cardBusy === 'pdf' ? 'Готовим PDF…' : 'Скачать PDF' }}
+        </button>
+        <button type="button" class="btn btn--ghost flex-1" :disabled="!!cardBusy" @click="cardAction('print')">
+          <Printer :size="17" /> {{ cardBusy === 'print' ? 'Готовим…' : 'Печать' }}
+        </button>
+      </template>
+    </Modal>
 
     <!-- Удостоверения -->
     <h2 class="group-title">Выданные удостоверения</h2>
@@ -140,9 +163,12 @@ import QRCode from 'qrcode'
 import api from '@/services/api'
 import { RouterLink } from 'vue-router'
 import {
-  Award, ChevronRight, CircleCheck, CircleX, Clock, Download, FileText, Paperclip,
+  Award, ChevronRight, CircleCheck, CircleX, Clock, Download, FileText, IdCard, Paperclip,
   Printer, QrCode, Stethoscope, Trash2, Upload,
 } from 'lucide-vue-next'
+import Modal from '@/components/Modal.vue'
+import WorkerCard from '@/components/WorkerCard.vue'
+import { downloadWorkerCardPdf, printWorkerCard, workerCardImage } from '@/utils/certificatePdf'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 
@@ -274,69 +300,39 @@ function downloadQrPng() {
   a.click()
 }
 
-function printPlasticCard() {
-  if (!qrCanvas.value || !verifyToken.value) return
-  const qrDataUrl = qrCanvas.value.toDataURL('image/png')
-  // Данные вставляются в HTML нового окна — экранируем.
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-  const fullName = esc(meData.value?.full_name)
-  const position = esc(meData.value?.position)
-  const orgName = esc(meData.value?.organization_name)
+// ── Карта работника ─────────────────────────────────────────────────────────
+const cardOpen = ref(false)
+const cardRef = ref(null)
+const cardQr = ref('')
+const cardBusy = ref('')
 
-  const win = window.open('', '_blank', 'width=500,height=350')
-  win.document.write(`<!DOCTYPE html>
-<html><head>
-  <meta charset="utf-8">
-  <title>Карточка работника</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    @page { size: 85.6mm 54mm; margin: 0; }
-    html, body { width:85.6mm; height:54mm; overflow:hidden; }
-    .card {
-      width:85.6mm; height:54mm;
-      display:flex; font-family:Arial,sans-serif;
+async function openCard() {
+  if (!verifyToken.value) return
+  if (!cardQr.value) {
+    cardQr.value = await QRCode.toDataURL(workerCardUrl(), {
+      width: 780, margin: 0, errorCorrectionLevel: 'M',
+      color: { dark: '#0b2a5b', light: '#ffffff' },
+    })
+  }
+  cardOpen.value = true
+}
+
+async function cardAction(kind) {
+  const card = cardRef.value
+  if (!card) return
+  cardBusy.value = kind
+  try {
+    const img = await workerCardImage(card.node(), card.W, card.H)
+    if (kind === 'pdf') {
+      await downloadWorkerCardPdf(img, `Карта_${(meData.value?.full_name || 'работника').replace(/\s+/g, '_')}`)
+    } else {
+      printWorkerCard(img)
     }
-    .stripe {
-      background:#1d4ed8; color:#fff;
-      width:22mm; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; padding:3mm;
-    }
-    .qr { width:15mm; height:15mm; border-radius:2px; }
-    .brand { font-size:6.5pt; font-weight:bold; text-align:center;
-             letter-spacing:.5px; margin-top:2mm; line-height:1.2; }
-    .body {
-      flex:1; padding:4mm 4mm 3mm 4mm;
-      display:flex; flex-direction:column; justify-content:space-between;
-    }
-    .label { font-size:5pt; color:#9ca3af; text-transform:uppercase;
-             letter-spacing:.5px; margin-bottom:.5mm; }
-    .title { font-size:5.5pt; font-weight:bold; color:#374151; margin-bottom:2mm; }
-    .name { font-size:9pt; font-weight:bold; color:#111827; line-height:1.2; }
-    .pos  { font-size:6pt; color:#4b5563; margin-top:1mm; }
-    .org  { font-size:5.5pt; color:#6b7280; margin-top:.5mm; }
-    .hint { font-size:5pt; color:#9ca3af; }
-    .divider { height:.2mm; background:#e5e7eb; margin:2mm 0; }
-  </style>
-</head><body>
-<div class="card">
-  <div class="stripe">
-    <img src="${qrDataUrl}" class="qr">
-    <div class="brand">ÖZEN<br>PROM</div>
-  </div>
-  <div class="body">
-    <div>
-      <div class="label">удостоверение работника</div>
-      <div class="divider"></div>
-      <div class="name">${fullName}</div>
-      <div class="pos">${position}</div>
-      <div class="org">${orgName}</div>
-    </div>
-    <div class="hint">Отсканируйте QR для проверки допусков</div>
-  </div>
-</div>
-<script>window.onload=function(){window.print()}<${'/'}script>
-</body></html>`)
-  win.document.close()
+  } catch {
+    toast.error('Не удалось подготовить карту. Попробуйте ещё раз.')
+  } finally {
+    cardBusy.value = ''
+  }
 }
 
 function formatDate(d) {

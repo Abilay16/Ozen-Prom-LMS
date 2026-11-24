@@ -60,6 +60,25 @@ test('сертификат БиОТ ИТР: штамп ЭЦП и скачива�
   guard.check()
 })
 
+test('карта работника: новый макет, скачивание PDF', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'learner')
+  await page.goto('/my/certificates')
+  await page.getByRole('button', { name: 'Карта работника' }).click()
+  const card = page.locator('.worker-card')
+  await expect(card).toContainText('Тестов')
+  await expect(card).toContainText('Тест Тестович')
+  await expect(card.locator('img.qr')).toBeVisible()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Скачать PDF' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toBe('Карта_Тестов_Тест_Тестович.pdf')
+  const fs = await import('node:fs')
+  expect(fs.readFileSync(await file.path()).subarray(0, 5).toString()).toBe('%PDF-')
+  guard.check()
+})
+
 test('обучающемуся закрыта админка', async ({ page }) => {
   await login(page, 'learner')
   await page.goto('/admin/dashboard')

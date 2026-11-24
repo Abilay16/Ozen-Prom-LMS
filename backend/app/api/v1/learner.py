@@ -50,6 +50,8 @@ async def get_me(learner: CurrentLearner, db: DB):
         "verify_token": str(learner.verify_token) if learner.verify_token else None,
         "organization_name": user.organization.name if user.organization else None,
         "position": user.position_raw or (user.position.name if user.position else None),
+        # Фото для карты работника (сам файл отдаётся публично по id).
+        "photo_url": f"/api/v1/users/{learner.id}/photo" if user.photo_path else None,
     }
 
 
