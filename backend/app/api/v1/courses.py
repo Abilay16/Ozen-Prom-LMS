@@ -21,10 +21,22 @@ class CourseCreate(BaseModel):
 
 
 @router.get("")
-async def list_courses(db: DB, admin: CurrentAdmin, discipline_id: Optional[UUID] = None):
-    q = select(Course).options(selectinload(Course.discipline))
+async def list_courses(
+    db: DB, admin: CurrentAdmin,
+    discipline_id: Optional[UUID] = None,
+    archived: Optional[bool] = None,
+):
+    """archived=false — действующие (курс и его дисциплина активны),
+    archived=true — архив (отключён курс или его дисциплина), без параметра — все."""
+    from sqlalchemy import and_, not_
+    from app.models.discipline import Discipline
+
+    q = select(Course).join(Course.discipline).options(selectinload(Course.discipline))
     if discipline_id:
         q = q.where(Course.discipline_id == discipline_id)
+    if archived is not None:
+        live = and_(Course.is_active == True, Discipline.is_active == True)  # noqa: E712
+        q = q.where(not_(live) if archived else live)
     q = q.order_by(Course.name)
     result = await db.execute(q)
     return result.scalars().all()
@@ -71,7 +83,7 @@ async def delete_course(course_id: UUID, db: DB, admin: CurrentAdmin):
     if assigned:
         raise ConflictError(
             f"Курс назначен сотрудникам ({assigned}) — удалить его нельзя, это сотрёт историю обучения. "
-            "Снимите галочку «Активен», чтобы курс больше не назначался."
+            "Уберите его в архив — тогда он больше не будет назначаться."
         )
     file_paths = (await db.execute(
         select(CourseMaterial.file_path).where(CourseMaterial.course_id == course_id)

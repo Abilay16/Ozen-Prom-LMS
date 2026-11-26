@@ -2,8 +2,21 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Дисциплины</h1>
-      <button @click="openCreate" class="btn-primary">+ Добавить</button>
+      <button v-if="view === 'active'" @click="openCreate" class="btn-primary">+ Добавить</button>
     </div>
+
+    <div class="flex border-b mb-4" role="tablist">
+      <button v-for="t in TABS" :key="t.key" role="tab" :aria-selected="view === t.key"
+        @click="switchView(t.key)"
+        :class="['px-4 py-2 text-sm font-medium -mb-px', view === t.key ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700']">
+        {{ t.label }}
+      </button>
+    </div>
+
+    <p v-if="view === 'archived'" class="text-sm text-gray-500 mb-4 max-w-2xl">
+      Архивные дисциплины не предлагаются для новых потоков. Сотрудники, которым они уже назначены,
+      доучиваются как обычно; выданные удостоверения и сертификаты остаются действительными.
+    </p>
 
     <div v-if="disciplines.length" class="flex gap-3 mb-4">
       <input v-model="search" type="text" placeholder="Поиск по коду, названию..." class="input-field max-w-xs" />
@@ -29,8 +42,8 @@
     <RowsSkeleton v-if="loading" />
 
     <div v-else-if="!disciplines.length" class="text-center py-16 text-gray-400">
-      <div class="text-4xl mb-2">🏷️</div>
-      <div>Нет дисциплин. Добавьте первую.</div>
+      <Tags class="w-10 h-10 mx-auto mb-2" aria-hidden="true" />
+      <div>{{ view === 'active' ? 'Нет действующих дисциплин. Добавьте первую.' : 'В архиве пусто.' }}</div>
     </div>
 
     <div v-else-if="!filteredDisciplines.length" class="text-center py-16 text-gray-400">
@@ -43,7 +56,7 @@
           <tr>
             <th class="text-left px-4 py-3">Код</th>
             <th class="text-left px-4 py-3">Название</th>
-            <th class="text-left px-4 py-3">Статус</th>
+            <th class="text-left px-4 py-3">Курсов</th>
             <th class="px-4 py-3"></th>
           </tr>
         </thead>
@@ -51,12 +64,11 @@
           <tr v-for="d in filteredDisciplines" :key="d.id" class="border-b hover:bg-gray-50">
             <td class="px-4 py-3 font-mono font-medium">{{ d.code }}</td>
             <td class="px-4 py-3">{{ d.name }}</td>
-            <td class="px-4 py-3">
-              <Badge :variant="d.is_active ? 'passed' : 'failed'">{{ d.is_active ? 'Активна' : 'Неактивна' }}</Badge>
-            </td>
-            <td class="px-4 py-3 flex gap-3">
+            <td class="px-4 py-3 tabular-nums">{{ d.course_count }}</td>
+            <td class="px-4 py-3 flex gap-3 justify-end">
               <button @click="openEdit(d)" class="text-xs text-blue-600 hover:underline">Изменить</button>
-              <button @click="deleteDisc(d)" class="text-xs text-red-400 hover:text-red-600 hover:underline">Удалить</button>
+              <button v-if="view === 'active'" @click="archive(d)" class="text-xs text-gray-500 hover:text-gray-800 hover:underline">В архив</button>
+              <button v-else @click="restore(d)" class="text-xs text-green-600 hover:underline">Вернуть</button>
             </td>
           </tr>
         </tbody>
@@ -66,16 +78,22 @@
 </template>
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { Tags } from 'lucide-vue-next'
 import api from '@/services/api'
 import { useToast, apiErrorMessage } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import Modal from '@/components/Modal.vue'
-import Badge from '@/components/Badge.vue'
 import RowsSkeleton from '@/components/RowsSkeleton.vue'
+
+const TABS = [
+  { key: 'active', label: 'Действующие' },
+  { key: 'archived', label: 'Архив' },
+]
 
 const toast = useToast()
 const { confirm } = useConfirm()
 
+const view = ref('active')
 const disciplines = ref([])
 const search = ref('')
 const modal = ref(false)
@@ -93,12 +111,20 @@ const filteredDisciplines = computed(() => {
 onMounted(load)
 
 async function load() {
+  loading.value = true
   try {
-    const { data } = await api.get('/admin/disciplines')
+    const { data } = await api.get('/admin/disciplines', { params: { archived: view.value === 'archived' } })
     disciplines.value = data
   } finally {
     loading.value = false
   }
+}
+
+function switchView(v) {
+  if (view.value === v) return
+  view.value = v
+  search.value = ''
+  load()
 }
 
 function openCreate() {
@@ -131,11 +157,31 @@ async function save() {
   }
 }
 
-async function deleteDisc(d) {
-  const ok = await confirm({ message: `Удалить дисциплину «${d.name}»?`, danger: true, confirmText: 'Удалить' })
+async function archive(d) {
+  const ok = await confirm({
+    message: `Убрать дисциплину «${d.name}» в архив? Её больше нельзя будет выбрать для нового потока. `
+      + 'Кто уже учится — доучится, выданные удостоверения и сертификаты останутся действительными.',
+    confirmText: 'В архив',
+  })
   if (!ok) return
-  await api.delete(`/admin/disciplines/${d.id}`)
+  try {
+    await api.post(`/admin/disciplines/${d.id}/archive`)
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+    return
+  }
   await load()
-  toast.success('Дисциплина удалена')
+  toast.success('Дисциплина в архиве')
+}
+
+async function restore(d) {
+  try {
+    await api.post(`/admin/disciplines/${d.id}/restore`)
+  } catch (e) {
+    toast.error(apiErrorMessage(e))
+    return
+  }
+  await load()
+  toast.success('Дисциплина снова действует')
 }
 </script>

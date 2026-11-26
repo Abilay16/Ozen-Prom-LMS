@@ -56,6 +56,44 @@ test('протокол: печать → «Назад к протоколу» �
   guard.check()
 })
 
+test('дисциплины: в архив, новая с тем же кодом создаётся отдельно', async ({ page }) => {
+  const guard = watchErrors(page)
+  await login(page, 'admin')
+  await page.goto('/admin/disciplines')
+  const code = `ARCH${Date.now() % 100000}`
+  const main = page.locator('main')
+
+  async function create(name) {
+    await main.getByRole('button', { name: '+ Добавить' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.locator('input').nth(0).fill(code)
+    await dialog.locator('input').nth(1).fill(name)
+    await dialog.getByRole('button', { name: 'Сохранить' }).click()
+    await expect(main.getByRole('row', { name: new RegExp(name) })).toBeVisible()
+  }
+  async function archive(name) {
+    await main.getByRole('row', { name: new RegExp(name) }).getByRole('button', { name: 'В архив' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'В архив' }).click()
+    await expect(main.getByRole('row', { name: new RegExp(name) })).toHaveCount(0)
+  }
+
+  await create('Старая E2E')
+  await archive('Старая E2E')
+  await create('Новая E2E')  // раньше вместо новой «оживала» старая
+
+  await page.getByRole('tab', { name: 'Архив' }).click()
+  await expect(main.getByRole('row', { name: /Старая E2E/ }).first()).toBeVisible()
+  await expect(main.getByRole('row', { name: /Новая E2E/ })).toHaveCount(0)
+
+  // Вернуть старую нельзя, пока действует новая с тем же кодом.
+  await main.getByRole('row', { name: /Старая E2E/ }).first().getByRole('button', { name: 'Вернуть' }).click()
+  await expect(page.getByText(/уже есть/)).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Действующие' }).click()
+  await archive('Новая E2E')
+  guard.check()
+})
+
 test('член комиссии попадает на протоколы, без пунктов администрирования', async ({ page }) => {
   const guard = watchErrors(page)
   await login(page, 'chair')
